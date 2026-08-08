@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-    ChevronLeft, RotateCcw, Lightbulb,
+    RotateCcw, Lightbulb,
     Trophy, FastForward, Heart,
-    Mail, Lock, Eye, EyeOff, User as UserIcon, LogOut, Loader2,
-    DollarSign, Gift, History
+    Eye, EyeOff, LogOut, Loader2,
+    Gift, ShoppingBag, Play, Award
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -91,7 +91,7 @@ export default function NeonPathGame() {
         if (user && !loading) {
             generateLevel(level);
         }
-    }, [level, user, loading]);
+    }, [level, user, loading, generateLevel]);
 
     const handleNodeClick = async (clickedNode: PathNode) => {
         if (isWon || clickedNode.cleared || isProcessing) return;
@@ -187,7 +187,7 @@ export default function NeonPathGame() {
                 <div className="w-24 h-24 bg-cyan-400 rounded-3xl flex items-center justify-center shadow-glow mb-6">
                     <svg viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="h-12 w-12"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
                 </div>
-                <h1 className="text-5xl font-black italic mb-2 text-white uppercase">Neon Path</h1>
+                <h1 className="text-5xl font-black italic mb-2 text-white uppercase tracking-tighter">Neon Path</h1>
                 <p className="text-white/40 uppercase tracking-[0.4em] text-[10px] mb-10">Premium Puzzle Action</p>
                 <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3">
                     {!isLogin && <input type="text" placeholder="Gamer Tag" className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 font-bold" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} required />}
