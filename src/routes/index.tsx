@@ -4,7 +4,7 @@ import {
     RotateCcw, Lightbulb,
     Trophy, FastForward, Heart,
     Eye, EyeOff, LogOut, Loader2,
-    Gift, ShoppingBag, Play, Award
+    Gift, ShoppingBag, Play, Award, ChevronLeft
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -16,15 +16,13 @@ import { Capacitor } from '@capacitor/core'
 type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
 type PathNode = {
     id: string;
-    x: number;
-    y: number;
+    startX: number;
+    startY: number;
+    points: {x: number, y: number}[];
     dir: Direction;
-    color: string;
     cleared: boolean;
     isError?: boolean;
 };
-
-const COLORS = ['#22d3ee', '#f472b6', '#4ade80', '#fbbf24', '#818cf8'];
 
 const REWARDS = [
     { id: 'v5', name: '$5 Visa Card', cost: 5.00 },
@@ -59,26 +57,54 @@ export default function NeonPathGame() {
 
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
-        const count = Math.min(5 + Math.floor(lvl / 1.5), 18);
-        const usedPositions = new Set();
+        const count = Math.min(8 + Math.floor(lvl / 1.2), 20);
+        const gridWidth = 7;
+        const gridHeight = 9;
+        const occupied = new Set<string>();
 
         for(let i=0; i < count; i++) {
-            let rx, ry;
+            let sx, sy, dir: Direction;
             let attempts = 0;
-            do {
-                rx = Math.floor(Math.random() * 6);
-                ry = Math.floor(Math.random() * 8);
-                attempts++;
-            } while(usedPositions.has(`${rx},${ry}`) && attempts < 100);
 
-            usedPositions.add(`${rx},${ry}`);
+            do {
+                sx = Math.floor(Math.random() * gridWidth);
+                sy = Math.floor(Math.random() * gridHeight);
+                dir = (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[])[Math.floor(Math.random() * 4)];
+                attempts++;
+            } while (occupied.has(`${sx},${sy}`) && attempts < 100);
+
+            if (attempts >= 100) continue;
+
+            // Generate a zig-zag path
+            const points = [{x: sx, y: sy}];
+            let curX = sx;
+            let curY = sy;
+            occupied.add(`${sx},${sy}`);
+
+            const pathLength = Math.floor(Math.random() * 3) + 2;
+            for(let j=0; j<pathLength; j++) {
+                const turnDir = Math.random() > 0.5;
+                if (dir === 'UP' || dir === 'DOWN') {
+                    const step = turnDir ? 1 : -1;
+                    if (curX + step >= 0 && curX + step < gridWidth && !occupied.has(`${curX + step},${curY}`)) {
+                        curX += step;
+                    }
+                } else {
+                    const step = turnDir ? 1 : -1;
+                    if (curY + step >= 0 && curY + step < gridHeight && !occupied.has(`${curX},${curY + step}`)) {
+                        curY += step;
+                    }
+                }
+                points.push({x: curX, y: curY});
+                occupied.add(`${curX},${curY}`);
+            }
 
             newNodes.push({
                 id: `node-${i}-${Math.random()}`,
-                x: rx,
-                y: ry,
-                dir: (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[])[Math.floor(Math.random() * 4)],
-                color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                startX: sx,
+                startY: sy,
+                points,
+                dir,
                 cleared: false
             });
         }
@@ -88,20 +114,20 @@ export default function NeonPathGame() {
     }, []);
 
     useEffect(() => {
-        if (user && !loading) {
-            generateLevel(level);
-        }
+        if (user && !loading) generateLevel(level);
     }, [level, user, loading, generateLevel]);
 
     const handleNodeClick = async (clickedNode: PathNode) => {
         if (isWon || clickedNode.cleared || isProcessing) return;
 
-        const isBlocked = nodes.some(otherNode => {
-            if (otherNode.cleared || otherNode.id === clickedNode.id) return false;
-            if (clickedNode.dir === 'UP') return otherNode.x === clickedNode.x && otherNode.y < clickedNode.y;
-            if (clickedNode.dir === 'DOWN') return otherNode.x === clickedNode.x && otherNode.y > clickedNode.y;
-            if (clickedNode.dir === 'LEFT') return otherNode.y === clickedNode.y && otherNode.x < clickedNode.x;
-            if (clickedNode.dir === 'RIGHT') return otherNode.y === clickedNode.y && otherNode.x > clickedNode.x;
+        // Simplified collision: Can it move in its final direction?
+        const isBlocked = nodes.some(other => {
+            if (other.cleared || other.id === clickedNode.id) return false;
+            const endPoint = clickedNode.points[clickedNode.points.length - 1];
+            if (clickedNode.dir === 'UP') return other.startX === endPoint.x && other.startY < endPoint.y;
+            if (clickedNode.dir === 'DOWN') return other.startX === endPoint.x && other.startY > endPoint.y;
+            if (clickedNode.dir === 'LEFT') return other.startY === endPoint.y && other.startX < endPoint.x;
+            if (clickedNode.dir === 'RIGHT') return other.startY === endPoint.y && other.startX > endPoint.x;
             return false;
         });
 
@@ -109,189 +135,113 @@ export default function NeonPathGame() {
             if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
             setNodes(prev => prev.map(n => n.id === clickedNode.id ? { ...n, isError: true } : n));
             setTimeout(() => setNodes(prev => prev.map(n => ({ ...n, isError: false }))), 400);
-
-            if (lives > 1) {
-                setLives(prev => prev - 1);
-                toast.error("Blocked!");
-            } else {
-                toast.error("Out of lives! Level Reset.");
-                generateLevel(level);
-            }
+            if (lives > 1) setLives(prev => prev - 1);
+            else generateLevel(level);
             return;
         }
 
         if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
         const updatedNodes = nodes.map(n => n.id === clickedNode.id ? { ...n, cleared: true } : n);
         setNodes(updatedNodes);
-
-        const remaining = updatedNodes.filter(n => !n.cleared).length;
-        if (remaining === 0) {
-            handleWin();
-        }
+        if (updatedNodes.every(n => n.cleared)) handleWin();
     };
 
     const handleWin = async () => {
         setIsWon(true);
         const reward = 0.05;
         await addCash(reward, `Level ${level}`);
-        toast.success(`Victory! +$${reward}`);
         if (level % 2 === 0) await showInterstitial();
     };
 
-    const handleHint = async () => {
-        setIsProcessing(true);
-        const ad = await showRewardedAd();
-        if (ad.success) {
-            const playable = nodes.find(n => {
-                if (n.cleared) return false;
-                return !nodes.some(other => {
-                    if (other.cleared || other.id === n.id) return false;
-                    if (n.dir === 'UP') return other.x === n.x && other.y < n.y;
-                    if (n.dir === 'DOWN') return other.x === n.x && other.y > n.y;
-                    if (n.dir === 'LEFT') return other.y === n.y && other.x < n.x;
-                    if (n.dir === 'RIGHT') return other.y === n.y && other.x > n.x;
-                    return false;
-                });
-            });
-            if (playable) handleNodeClick(playable);
-        }
-        setIsProcessing(false);
-    };
-
-    const handlePayoutRequest = async (reward: any) => {
-        if ((profile?.cash_balance || 0) < reward.cost) return toast.error("Need more cash!");
-        if (!confirm(`Redeem $${reward.cost} for a ${reward.name}?`)) return;
-        try {
-            const { error } = await supabase.from('payout_requests').insert({ user_id: user?.id, reward_name: reward.name, amount: reward.cost });
-            if (error) throw error;
-            await addCash(-reward.cost, 'Redemption');
-            toast.success("Success! Check your email soon.");
-        } catch (e: any) { toast.error(e.message); }
-    };
-
-    const handleAuth = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (isSubmitting) return;
-        setIsSubmitting(true);
-        try {
-            if (isLogin) await signIn(email, password);
-            else await signUp(email, password, usernameInput);
-        } catch (error: any) { toast.error(error.message); } finally { setIsSubmitting(false); }
-    };
-
-    if (loading) return <div className="h-screen w-full bg-[#050510] flex items-center justify-center text-white"><Loader2 className="animate-spin text-cyan-400 h-10 w-10" /></div>;
+    if (loading) return <div className="h-screen w-full bg-white flex items-center justify-center"><Loader2 className="animate-spin text-blue-600 h-10 w-10" /></div>;
 
     if (!user) {
         return (
-            <div className="h-screen w-full bg-[#050510] flex flex-col items-center justify-center p-8 text-white text-center">
-                <div className="w-24 h-24 bg-cyan-400 rounded-3xl flex items-center justify-center shadow-glow mb-6">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="h-12 w-12"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+            <div className="h-screen w-full bg-[#f8f9ff] flex flex-col items-center justify-center p-8 text-slate-800 text-center font-sans">
+                <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-lg mb-6">
+                    <Play className="text-white h-10 w-10 fill-current" />
                 </div>
-                <h1 className="text-5xl font-black italic mb-2 text-white uppercase tracking-tighter">Neon Path</h1>
-                <p className="text-white/40 uppercase tracking-[0.4em] text-[10px] mb-10">Premium Puzzle Action</p>
+                <h1 className="text-4xl font-black text-slate-900 mb-2">NEON PATH</h1>
+                <p className="text-slate-400 uppercase tracking-widest text-[10px] mb-10 font-bold">The Ultimate Path Puzzle</p>
                 <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3">
-                    {!isLogin && <input type="text" placeholder="Gamer Tag" className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 font-bold" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} required />}
-                    <input type="email" placeholder="Email" className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 font-bold" value={email} onChange={e => setEmail(e.target.value)} required />
-                    <div className="relative">
-                        <input type={showPass ? "text" : "password"} placeholder="Password" className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 font-bold" value={password} onChange={e => setPassword(e.target.value)} required />
-                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-4 opacity-30">{showPass ? <EyeOff size={20}/> : <Eye size={20}/>}</button>
-                    </div>
-                    <button type="submit" disabled={isSubmitting} className="w-full bg-cyan-400 text-black py-5 rounded-3xl font-black uppercase tracking-widest shadow-glow mt-4 flex items-center justify-center gap-2">{isSubmitting && <Loader2 className="h-5 w-5 animate-spin" />}{isLogin ? 'Login' : 'Join Fleet'}</button>
-                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-white/20 font-black uppercase mt-6">{isLogin ? "Need an account? Join" : "Back to Login"}</button>
+                    {!isLogin && <input type="text" placeholder="Gamer Tag" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold shadow-sm" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} required />}
+                    <input type="email" placeholder="Email" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold shadow-sm" value={email} onChange={e => setEmail(e.target.value)} required />
+                    <input type={showPass ? "text" : "password"} placeholder="Password" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold shadow-sm" value={password} onChange={e => setPassword(e.target.value)} required />
+                    <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-blue-200 shadow-xl mt-4">
+                        {isLogin ? 'Login' : 'Join Game'}
+                    </button>
+                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-slate-400 font-black uppercase mt-6">{isLogin ? "Need an account? Join" : "Back to Login"}</button>
                 </form>
             </div>
         )
     }
 
     return (
-        <div className="h-screen w-full bg-[#02020a] text-white flex flex-col items-center overflow-hidden relative">
-            <div className="flex-1 w-full max-w-md flex flex-col items-center z-10 px-4 pt-10 pb-32">
-                {activeTab === 'play' && (
-                    <>
-                        <div className="w-full flex justify-between items-start mb-8">
-                            <div className="flex flex-col gap-2">
-                                <div className="bg-white/5 border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-2">
-                                    <Heart className="h-4 w-4 text-red-500 fill-red-500" />
-                                    <span className="font-black text-lg">{lives}</span>
-                                </div>
-                                <button onClick={() => signOut()} className="p-3 bg-red-500/10 rounded-xl border border-red-500/20 text-red-500"><LogOut size={20}/></button>
-                            </div>
-                            <div className="text-right">
-                                <div className="bg-white/5 border border-white/10 px-6 py-3 rounded-3xl mb-2">
-                                    <div className="text-[9px] uppercase font-black opacity-30">Balance</div>
-                                    <div className="text-2xl font-black italic text-cyan-400">${(profile?.cash_balance || 0).toFixed(2)}</div>
-                                </div>
-                                <div className="text-xs font-black text-white/40 uppercase">Level {level}</div>
-                            </div>
-                        </div>
-
-                        <div className="relative w-full aspect-[3/4] bg-black/40 rounded-[2.5rem] border border-white/5 p-4 flex items-center justify-center">
-                             <div className="grid grid-cols-6 grid-rows-8 gap-2 w-full h-full relative">
-                                {nodes.map((node) => (
-                                    <motion.button
-                                        key={node.id}
-                                        whileTap={{ scale: 0.8 }}
-                                        animate={node.isError ? { x: [-5, 5, -5, 5, 0] } : {}}
-                                        onClick={() => handleNodeClick(node)}
-                                        style={{ gridColumnStart: node.x + 1, gridRowStart: node.y + 1, color: node.color, filter: node.cleared ? 'none' : `drop-shadow(0 0 10px ${node.color}aa)` }}
-                                        className={cn("flex items-center justify-center transition-opacity duration-500", node.cleared ? "opacity-0 pointer-events-none" : "opacity-100")}
-                                    >
-                                        <ArrowIcon direction={node.dir} className="h-10 w-10" />
-                                    </motion.button>
-                                ))}
-                             </div>
-                        </div>
-
-                        <div className="flex gap-4 w-full px-4 mt-8">
-                             <button onClick={handleHint} className="flex-1 py-5 bg-yellow-400 text-black rounded-3xl flex items-center justify-center gap-2 font-black uppercase text-sm shadow-glow"><Lightbulb size={20} fill="black" /> Hint</button>
-                            <button onClick={() => generateLevel(level)} className="p-5 bg-white/5 border border-white/10 rounded-3xl text-white"><RotateCcw size={24} /></button>
-                        </div>
-                    </>
-                )}
-
-                {activeTab === 'shop' && (
-                    <div className="w-full py-8 text-center">
-                         <h2 className="text-4xl font-black italic uppercase mb-10">Power Ups</h2>
-                         <div className="bg-white/5 border border-white/10 p-8 rounded-[40px] flex justify-between items-center">
-                            <div className="text-left"><span className="font-black text-xl uppercase block">Level Skip</span><span className="text-[10px] opacity-40 font-bold uppercase">Stuck? Skip it!</span></div>
-                            <button className="bg-pink-500 text-white font-black px-8 py-4 rounded-2xl shadow-glow">$1.99</button>
-                         </div>
+        <div className="h-screen w-full bg-[#f0f2f9] flex flex-col items-center overflow-hidden font-sans">
+            {/* Header */}
+            <div className="w-full px-6 pt-12 flex justify-between items-center z-20">
+                <button className="p-3 bg-white rounded-full shadow-sm text-slate-400"><ChevronLeft size={20}/></button>
+                <div className="flex flex-col items-center">
+                    <span className="text-blue-600 font-black text-sm uppercase">Level {level}</span>
+                    <div className="flex gap-1 mt-1">
+                        {[...Array(3)].map((_, i) => <Heart key={i} size={14} className={cn(i < lives ? "text-red-500 fill-red-500" : "text-slate-200 fill-slate-200")} />)}
                     </div>
-                )}
-
-                {activeTab === 'payout' && (
-                    <div className="w-full py-8">
-                        <h2 className="text-4xl font-black italic uppercase text-center mb-8 text-emerald-400">Rewards</h2>
-                        <div className="bg-gradient-to-br from-emerald-600 to-green-900 p-8 rounded-[3rem] border border-white/10 shadow-2xl">
-                             <div className="flex justify-between items-start mb-6">
-                                <Gift size={40} />
-                                <div className="text-right"><div className="text-[8px] uppercase font-black opacity-60">Balance</div><div className="text-2xl font-black italic">${(profile?.cash_balance || 0).toFixed(2)}</div></div>
-                             </div>
-                             <div className="space-y-2">
-                                {REWARDS.map(r => (
-                                    <button key={r.id} onClick={() => handlePayoutRequest(r)} className={cn("w-full bg-black/20 hover:bg-black/40 p-5 rounded-2xl flex justify-between items-center transition-all border border-white/5", (profile?.cash_balance || 0) < r.cost && "opacity-40")}>
-                                        <span className="font-black uppercase text-xs">{r.name}</span>
-                                        <span className="text-xs font-black">${r.cost.toFixed(2)}</span>
-                                    </button>
-                                ))}
-                             </div>
-                        </div>
-                    </div>
-                )}
+                </div>
+                <div className="bg-white px-4 py-2 rounded-full shadow-sm flex items-center gap-2">
+                     <div className="w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center text-[10px] font-black text-white">C</div>
+                     <span className="font-black text-slate-700 text-sm">{(profile?.cash_balance || 0).toFixed(2)}</span>
+                </div>
             </div>
 
-            <nav className="fixed bottom-0 left-0 right-0 h-24 bg-[#050510]/95 backdrop-blur-3xl border-t border-white/5 flex justify-around items-center px-6 pb-6 z-50">
-                <NavButton icon={ShoppingBag} label="Shop" active={activeTab === 'shop'} onClick={() => setActiveTab('shop')} />
-                <NavButton icon={Play} label="Play" active={activeTab === 'play'} onClick={() => setActiveTab('play')} />
-                <NavButton icon={Award} label="Prizes" active={activeTab === 'payout'} onClick={() => setActiveTab('payout')} />
-            </nav>
+            {/* Game Board */}
+            <div className="flex-1 w-full flex items-center justify-center p-4">
+                <div className="w-full max-w-sm aspect-[4/5] bg-white rounded-[3rem] shadow-xl border-8 border-white relative overflow-hidden flex items-center justify-center">
+                    {/* Grid Lines */}
+                    <div className="absolute inset-0 grid grid-cols-7 grid-rows-9">
+                        {[...Array(63)].map((_, i) => (
+                            <div key={i} className="border-[0.5px] border-slate-100 flex items-center justify-center">
+                                <div className="w-1 h-1 bg-slate-200 rounded-full opacity-50" />
+                            </div>
+                        ))}
+                    </div>
 
+                    {/* Nodes (Arrows with Paths) */}
+                    <div className="relative w-full h-full grid grid-cols-7 grid-rows-9 p-2">
+                        {nodes.map((node) => (
+                            <div key={node.id} style={{ gridColumnStart: node.startX + 1, gridRowStart: node.startY + 1 }} className="relative">
+                                {!node.cleared && (
+                                    <motion.button
+                                        onClick={() => handleNodeClick(node)}
+                                        animate={node.isError ? { x: [-3, 3, -3, 3, 0] } : {}}
+                                        className="w-full h-full flex items-center justify-center z-30"
+                                    >
+                                        <ArrowShape node={node} />
+                                    </motion.button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Bottom Controls */}
+            <div className="w-full px-10 pb-12 flex justify-between items-center z-20">
+                <button className="p-4 bg-blue-50 text-blue-600 rounded-2xl font-black text-xl">#</button>
+                <button className="p-4 bg-blue-50 text-blue-600 rounded-full"><div className="w-6 h-6 border-2 border-blue-600 rounded-full flex items-center justify-center"><div className="w-2 h-2 bg-blue-600 rounded-full" /></div></button>
+                <button onClick={() => showRewardedAd()} className="p-4 bg-blue-50 text-blue-600 rounded-2xl relative">
+                    <Lightbulb size={24} />
+                    <span className="absolute -top-1 -right-1 bg-white text-[8px] px-1 rounded-md border border-slate-100 font-bold">AD</span>
+                </button>
+                <button onClick={() => generateLevel(level)} className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><RotateCcw size={24} /></button>
+            </div>
+
+            {/* Victory Overlay */}
             <AnimatePresence>
                 {isWon && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-2xl flex flex-col items-center justify-center p-12 text-center">
-                        <Trophy className="h-32 w-32 text-cyan-400 mb-6 drop-shadow-glow" />
-                        <h2 className="text-6xl font-black italic mb-8 uppercase">Victory!</h2>
-                        <button onClick={() => setLevel(prev => prev + 1)} className="w-full max-w-xs py-8 bg-cyan-400 text-black rounded-full font-black text-2xl uppercase shadow-glow flex items-center justify-center gap-3">Next Level <FastForward fill="black" /></button>
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-blue-600/95 flex flex-col items-center justify-center p-12 text-center text-white">
+                        <Trophy className="h-32 w-32 mb-6" />
+                        <h2 className="text-5xl font-black italic mb-8">VICTORY!</h2>
+                        <button onClick={() => setLevel(prev => prev + 1)} className="w-full max-w-xs py-6 bg-white text-blue-600 rounded-full font-black text-xl shadow-2xl">NEXT LEVEL</button>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -299,20 +249,32 @@ export default function NeonPathGame() {
     )
 }
 
-function NavButton({ icon: Icon, label, active, onClick }: { icon: any, label: string, active: boolean, onClick: () => void }) {
-    return (
-      <button onClick={onClick} className={cn("flex flex-col items-center justify-center gap-1 w-20 py-2 transition-all", active ? "text-cyan-400 scale-110" : "text-white/20")}>
-        <Icon className={cn("h-6 w-6", active && "fill-current")} />
-        <span className="text-[8px] font-black uppercase tracking-widest">{label}</span>
-      </button>
-    );
-}
+function ArrowShape({ node }: { node: PathNode }) {
+    // Generate SVG path based on points
+    const cellSize = 100 / 7;
+    let d = `M 50 50`; // Start at center of start cell
 
-function ArrowIcon({ direction, className }: { direction: Direction, className?: string }) {
-    const rotations = { UP: 'rotate-0', DOWN: 'rotate-180', LEFT: '-rotate-90', RIGHT: 'rotate-90' };
+    // This logic creates the "bent" lines from the screenshots
+    node.points.forEach((p, i) => {
+        if (i === 0) return;
+        const prev = node.points[i-1];
+        const dx = (p.x - prev.x) * 100;
+        const dy = (p.y - prev.y) * 100;
+        d += ` l ${dx} ${dy}`;
+    });
+
+    const rotations = { UP: 0, RIGHT: 90, DOWN: 180, LEFT: 270 };
+
     return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className={cn("transition-transform duration-500", rotations[direction], className)}>
-            <path d="M12 19V5M5 12l7-7 7 7" />
+        <svg viewBox="0 0 100 100" className="absolute overflow-visible w-full h-full pointer-events-none">
+            {/* The Trail */}
+            <path d={d} fill="none" stroke="black" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
+            {/* The Start Dot */}
+            <circle cx="50" cy="50" r="6" fill="white" stroke="black" strokeWidth="2" />
+            {/* The Head Arrow */}
+            <g transform={`translate(${50 + (node.points[node.points.length-1].x - node.startX)*100}, ${50 + (node.points[node.points.length-1].y - node.startY)*100}) rotate(${rotations[node.dir]})`}>
+                <path d="M -15 -10 L 0 15 L 15 -10 Z" fill="black" />
+            </g>
         </svg>
     );
 }
