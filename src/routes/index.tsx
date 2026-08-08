@@ -22,10 +22,11 @@ interface Point {
 
 interface PathNode {
     id: string;
-    points: Point[];
-    dir: Direction;
+    points: Point[]; // Sequence of points from Dot to Arrow
+    dir: Direction;  // Final exit direction
     cleared: boolean;
     isError?: boolean;
+    exitProgress?: number; // 0 to 1 for animation
 }
 
 export default function NeonPathGame() {
@@ -46,8 +47,8 @@ export default function NeonPathGame() {
     const [isWon, setIsWon] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const gridW = 9; // Number of vertical lines
-    const gridH = 11; // Number of horizontal lines
+    const gridW = 9;
+    const gridH = 11;
 
     useEffect(() => {
         if (Capacitor.isNativePlatform()) {
@@ -58,60 +59,94 @@ export default function NeonPathGame() {
 
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
-        const occupiedPoints = new Set<string>();
-        const count = Math.min(6 + Math.floor(lvl / 1.5), 12);
+        const occupied = new Set<string>();
+        const count = Math.min(6 + Math.floor(lvl / 1.5), 14);
+
+        // Generate puzzles using "Reverse Logic" to guarantee solvability
+        // We start with a piece at the edge and snake it IN.
+        // That means it is GUARANTEED to be able to slide OUT.
 
         for (let i = 0; i < count; i++) {
-            let sx = Math.floor(Math.random() * (gridW - 2)) + 1;
-            let sy = Math.floor(Math.random() * (gridH - 2)) + 1;
+            let points: Point[] = [];
+            let dir: Direction;
             let attempts = 0;
 
-            while (occupiedPoints.has(`${sx},${sy}`) && attempts < 50) {
-                sx = Math.floor(Math.random() * (gridW - 2)) + 1;
-                sy = Math.floor(Math.random() * (gridH - 2)) + 1;
+            while (attempts < 100) {
+                // 1. Pick a random edge to "enter" from
+                const edge = Math.floor(Math.random() * 4);
+                let start: Point;
+                let initialDir: Direction;
+
+                if (edge === 0) { start = { x: Math.floor(Math.random() * (gridW-2))+1, y: 0 }; initialDir = 'DOWN'; dir = 'UP'; }
+                else if (edge === 1) { start = { x: Math.floor(Math.random() * (gridW-2))+1, y: gridH - 1 }; initialDir = 'UP'; dir = 'DOWN'; }
+                else if (edge === 2) { start = { x: 0, y: Math.floor(Math.random() * (gridH-2))+1 }; initialDir = 'RIGHT'; dir = 'LEFT'; }
+                else { start = { x: gridW - 1, y: Math.floor(Math.random() * (gridH-2))+1 }; initialDir = 'LEFT'; dir = 'RIGHT'; }
+
+                if (occupied.has(`${start.x},${start.y}`)) { attempts++; continue; }
+
+                // 2. Snake inwards
+                let cur = { ...start };
+                const path: Point[] = [cur];
+                let currentOccupied = new Set<string>();
+                currentOccupied.add(`${cur.x},${cur.y}`);
+
+                const length = Math.floor(Math.random() * 3) + 2;
+                let valid = true;
+                let moveDir = initialDir;
+
+                for (let j = 0; j < length; j++) {
+                    // Try to move in moveDir
+                    const dist = Math.floor(Math.random() * 2) + 1;
+                    let next = { ...cur };
+                    if (moveDir === 'UP') next.y -= dist;
+                    else if (moveDir === 'DOWN') next.y += dist;
+                    else if (moveDir === 'LEFT') next.x -= dist;
+                    else next.x += dist;
+
+                    // Bounds check
+                    if (next.x < 1 || next.x > gridW - 2 || next.y < 1 || next.y > gridH - 2) { valid = false; break; }
+
+                    // Check if path segment intersects existing pieces
+                    const stepX = next.x > cur.x ? 1 : (next.x < cur.x ? -1 : 0);
+                    const stepY = next.y > cur.y ? 1 : (next.y < cur.y ? -1 : 0);
+                    let tx = cur.x, ty = cur.y;
+                    while (tx !== next.x || ty !== next.y) {
+                        tx += stepX; ty += stepY;
+                        if (occupied.has(`${tx},${ty}`)) { valid = false; break; }
+                    }
+                    if (!valid) break;
+
+                    path.push({ ...next });
+                    cur = { ...next };
+                    // Mark as occupied
+                    tx = path[path.length-2].x; ty = path[path.length-2].y;
+                    while (tx !== next.x || ty !== next.y) {
+                        tx += stepX; ty += stepY;
+                        occupied.add(`${tx},${ty}`);
+                    }
+
+                    // Change direction for next segment
+                    moveDir = (moveDir === 'UP' || moveDir === 'DOWN')
+                        ? (Math.random() > 0.5 ? 'LEFT' : 'RIGHT')
+                        : (Math.random() > 0.5 ? 'UP' : 'DOWN');
+                }
+
+                if (valid && path.length >= 2) {
+                    // Reverse the path so it goes from Inner Dot to Outer Arrow
+                    points = path.reverse();
+                    break;
+                }
                 attempts++;
             }
 
-            const points: Point[] = [{ x: sx, y: sy }];
-            occupiedPoints.add(`${sx},${sy}`);
-
-            let curX = sx;
-            let curY = sy;
-            const segments = Math.floor(Math.random() * 3) + 1;
-
-            for (let s = 0; s < segments; s++) {
-                const horizontal = s % 2 === 0;
-                const dist = Math.floor(Math.random() * 2) + 1;
-                let nextX = curX;
-                let nextY = curY;
-
-                if (horizontal) {
-                    nextX = Math.max(0, Math.min(gridW - 1, curX + (Math.random() > 0.5 ? dist : -dist)));
-                } else {
-                    nextY = Math.max(0, Math.min(gridH - 1, curY + (Math.random() > 0.5 ? dist : -dist)));
-                }
-
-                if (nextX === curX && nextY === curY) continue;
-
-                points.push({ x: nextX, y: nextY });
-                curX = nextX;
-                curY = nextY;
+            if (points.length >= 2) {
+                newNodes.push({
+                    id: `node-${i}-${Math.random()}`,
+                    points,
+                    dir,
+                    cleared: false
+                });
             }
-
-            const last = points[points.length - 1];
-            const prev = points[points.length - 2] || points[0];
-            let dir: Direction = 'UP';
-            if (last.x > prev.x) dir = 'RIGHT';
-            else if (last.x < prev.x) dir = 'LEFT';
-            else if (last.y > prev.y) dir = 'DOWN';
-            else dir = 'UP';
-
-            newNodes.push({
-                id: `node-${i}-${Math.random()}`,
-                points,
-                dir,
-                cleared: false
-            });
         }
 
         setNodes(newNodes);
@@ -126,21 +161,53 @@ export default function NeonPathGame() {
     const handleNodeClick = async (clickedNode: PathNode) => {
         if (isWon || clickedNode.cleared || isProcessing) return;
 
+        // Collision logic: Check if the shape can move out in 'dir'
+        const isBlocked = nodes.some(other => {
+            if (other.cleared || other.id === clickedNode.id) return false;
+
+            // For every point in the clicked shape, check if moving it along its exit direction hits another piece
+            return clickedNode.points.some(p => {
+                return other.points.some(op => {
+                    if (clickedNode.dir === 'UP') return p.x === op.x && p.y > op.y;
+                    if (clickedNode.dir === 'DOWN') return p.x === op.x && p.y < op.y;
+                    if (clickedNode.dir === 'LEFT') return p.y === op.y && p.x > op.x;
+                    if (clickedNode.dir === 'RIGHT') return p.y === op.y && p.x < op.x;
+                    return false;
+                });
+            });
+        });
+
+        if (isBlocked) {
+            if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
+            setNodes(prev => prev.map(n => n.id === clickedNode.id ? { ...n, isError: true } : n));
+            setTimeout(() => setNodes(prev => prev.map(n => ({ ...n, isError: false }))), 400);
+            if (lives > 1) setLives(prev => prev - 1);
+            else {
+                toast.error("Out of lives!");
+                generateLevel(level);
+            }
+            return;
+        }
+
+        // Play success haptic
         if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Light });
 
-        const updatedNodes = nodes.map(n => n.id === clickedNode.id ? { ...n, cleared: true } : n);
-        setNodes(updatedNodes);
+        // Start exit animation
+        setIsProcessing(true);
+        setNodes(prev => prev.map(n => n.id === clickedNode.id ? { ...n, exitProgress: 1 } : n));
 
-        if (updatedNodes.every(n => n.cleared)) {
-            handleWin();
-        }
-    };
-
-    const handleWin = async () => {
-        setIsWon(true);
-        const reward = 0.05;
-        await addCash(reward, `Level ${level}`);
-        if (level % 2 === 0) await showInterstitial();
+        // Delay removing from state until animation finishes
+        setTimeout(() => {
+            setNodes(prev => {
+                const updated = prev.map(n => n.id === clickedNode.id ? { ...n, cleared: true } : n);
+                if (updated.every(n => n.cleared)) {
+                    setIsWon(true);
+                    addCash(0.05, `Level ${level}`);
+                }
+                return updated;
+            });
+            setIsProcessing(false);
+        }, 400);
     };
 
     const handleAuth = async (e: React.FormEvent) => {
@@ -163,9 +230,9 @@ export default function NeonPathGame() {
                 </div>
                 <h1 className="text-3xl font-black text-[#5D6BB2] mb-2 uppercase tracking-tighter">Neon Path</h1>
                 <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 mt-8">
-                    {!isLogin && <input type="text" placeholder="Gamer Tag" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} required />}
-                    <input type="email" placeholder="Email" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none" value={email} onChange={e => setEmail(e.target.value)} required />
-                    <input type="password" placeholder="Password" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none" value={password} onChange={e => setPassword(e.target.value)} required />
+                    {!isLogin && <input type="text" placeholder="Gamer Tag" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} required />}
+                    <input type="email" placeholder="Email" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm" value={email} onChange={e => setEmail(e.target.value)} required />
+                    <input type="password" placeholder="Password" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm" value={password} onChange={e => setPassword(e.target.value)} required />
                     <button type="submit" className="w-full bg-[#5D6BB2] text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl mt-4">
                         {isLogin ? 'Login' : 'Join Game'}
                     </button>
@@ -176,56 +243,58 @@ export default function NeonPathGame() {
     }
 
     return (
-        <div className="h-screen w-full bg-[#F9F9F7] flex flex-col items-center overflow-hidden font-sans">
+        <div className="h-screen w-full bg-[#F0F1F0] flex flex-col items-center overflow-hidden font-sans">
             {/* Header */}
             <div className="w-full px-6 pt-10 flex justify-between items-start z-20">
-                <button onClick={() => signOut()} className="p-3 bg-[#E0E2EE] rounded-full text-[#5D6BB2] transition-transform active:scale-90 shadow-sm"><ChevronLeft size={24} strokeWidth={3}/></button>
+                <button onClick={() => signOut()} className="p-3 bg-[#E4E6F0] rounded-full text-[#5D6BB2] shadow-sm active:scale-90 transition-transform"><ChevronLeft size={24} strokeWidth={3}/></button>
                 <div className="flex flex-col items-center pt-2">
-                    <span className="text-[#5D6BB2] font-black text-base uppercase tracking-tight">Level {level}</span>
-                    <div className="flex gap-1 mt-1">
-                        {[...Array(3)].map((_, i) => <Heart key={i} size={18} className={cn(i < lives ? "text-red-500 fill-red-500" : "text-slate-200 fill-slate-200")} />)}
+                    <span className="text-[#5D6BB2] font-black text-lg mb-1 tracking-tight">Level {level}</span>
+                    <div className="flex gap-1.5">
+                        {[...Array(3)].map((_, i) => <Heart key={i} size={22} className={cn(i < lives ? "text-[#FF5252] fill-[#FF5B5B]" : "text-slate-200 fill-slate-200")} />)}
                     </div>
                 </div>
-                <div className="bg-white pl-5 pr-2 py-1.5 rounded-full shadow-sm flex items-center gap-3 border border-slate-100">
+                <div className="bg-white pl-5 pr-2 py-2 rounded-full shadow-md flex items-center gap-3 border border-white">
                      <span className="font-black text-slate-600 text-sm">{(profile?.cash_balance || 0).toFixed(2)}</span>
-                     <div className="w-7 h-7 bg-yellow-400 rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-inner border-2 border-white/20">
-                        <div className="w-3.5 h-3.5 border-2 border-white/30 rounded-full" />
+                     <div className="w-8 h-8 bg-[#FFD700] rounded-full flex items-center justify-center text-[10px] font-black text-white shadow-inner border-2 border-white/20">
+                        <div className="w-4 h-4 border-2 border-white/40 rounded-full" />
                      </div>
                 </div>
             </div>
 
             {/* Game Board */}
-            <div className="flex-1 w-full flex items-center justify-center p-6 mb-8">
-                <div className="w-full max-w-sm aspect-[4/5] bg-white rounded-[2.5rem] shadow-xl border-4 border-white/50 relative overflow-hidden">
+            <div className="flex-1 w-full flex items-center justify-center p-6 mb-4">
+                <div className="w-full max-w-sm aspect-[4/5] bg-white rounded-[3rem] shadow-2xl border-[12px] border-white relative overflow-hidden">
                     {/* Grid Intersection Dots */}
                     <div className="absolute inset-0 grid grid-cols-9 grid-rows-11 p-4">
                         {[...Array(99)].map((_, i) => (
                             <div key={i} className="flex items-center justify-center relative">
                                 <div className="w-1.5 h-1.5 bg-slate-100 rounded-full z-0" />
-                                <div className="absolute w-[0.5px] h-full bg-slate-50/30" />
-                                <div className="absolute h-[0.5px] w-full bg-slate-50/30" />
+                                <div className="absolute w-[0.5px] h-full bg-slate-50/20" />
+                                <div className="absolute h-[0.5px] w-full bg-slate-50/20" />
                             </div>
                         ))}
                     </div>
 
-                    {/* Nodes Area */}
+                    {/* Nodes Layer */}
                     <div className="absolute inset-0 p-4">
                          {nodes.map((node) => (
                             <div
                                 key={node.id}
                                 className={cn(
-                                    "absolute transition-opacity duration-300",
-                                    node.cleared ? "opacity-0 pointer-events-none" : "opacity-100"
+                                    "absolute transition-all duration-500",
+                                    node.cleared ? "opacity-0 scale-0" : "opacity-100"
                                 )}
                                 style={{
                                     left: `${(node.points[0].x / (gridW - 1)) * 100}%`,
                                     top: `${(node.points[0].y / (gridH - 1)) * 100}%`,
-                                    width: '1px', height: '1px', // Anchor point
-                                    zIndex: 30
+                                    width: '1px', height: '1px',
+                                    zIndex: 30,
+                                    transform: node.exitProgress ? `translate(${node.dir === 'LEFT' ? -400 : node.dir === 'RIGHT' ? 400 : 0}px, ${node.dir === 'UP' ? -400 : node.dir === 'DOWN' ? 400 : 0}px)` : 'none'
                                 }}
                             >
                                 <motion.button
                                     onClick={() => handleNodeClick(node)}
+                                    animate={node.isError ? { x: [-3, 3, -3, 3, 0] } : {}}
                                     whileTap={{ scale: 0.95 }}
                                     className="relative origin-top-left"
                                     style={{ width: '40px', height: '40px', transform: 'translate(-20px, -20px)' }}
@@ -239,24 +308,23 @@ export default function NeonPathGame() {
             </div>
 
             {/* Bottom Controls */}
-            <div className="w-full px-8 pb-12 flex justify-between items-center z-20">
-                <CircularButton icon={<Hash size={24} strokeWidth={3}/>} />
-                <CircularButton icon={<Target size={24} strokeWidth={3}/>} />
-                <CircularButton
-                    onClick={() => showRewardedAd()}
-                    icon={<Lightbulb size={24} strokeWidth={3}/>}
-                    badge="AD"
-                />
-                <CircularButton onClick={() => generateLevel(level)} icon={<RotateCcw size={24} strokeWidth={3}/>} />
+            <div className="w-full px-8 pb-10 flex justify-between items-center z-20">
+                <CircularButton icon={<Hash size={28} strokeWidth={3}/>} />
+                <CircularButton icon={<Target size={28} strokeWidth={3}/>} />
+                <button onClick={() => showRewardedAd()} className="w-16 h-16 bg-[#E4E6F0] rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm active:scale-90 transition-all relative">
+                    <Lightbulb size={28} strokeWidth={3}/>
+                    <span className="absolute -top-1.5 -right-1.5 bg-white text-[9px] px-2 py-0.5 rounded-lg border border-slate-200 font-black text-[#5D6BB2] shadow-sm">AD</span>
+                </button>
+                <CircularButton onClick={() => generateLevel(level)} icon={<RotateCcw size={28} strokeWidth={3}/>} />
             </div>
 
             {/* Victory Overlay */}
             <AnimatePresence>
                 {isWon && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#5D6BB2]/95 flex flex-col items-center justify-center p-12 text-center text-white backdrop-blur-sm">
-                        <Trophy className="h-32 w-32 mb-6 drop-shadow-2xl" />
-                        <h2 className="text-5xl font-black italic mb-8 tracking-tighter">LEVEL COMPLETE!</h2>
-                        <button onClick={() => setLevel(prev => prev + 1)} className="w-full max-w-xs py-6 bg-white text-[#5D6BB2] rounded-full font-black text-xl shadow-2xl transition-transform active:scale-95">CONTINUE</button>
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#5D6BB2]/90 flex flex-col items-center justify-center p-12 text-center text-white backdrop-blur-md">
+                        <Trophy className="h-40 w-40 mb-8 drop-shadow-2xl" />
+                        <h2 className="text-6xl font-black italic mb-10 tracking-tighter">EXCELLENT!</h2>
+                        <button onClick={() => setLevel(prev => prev + 1)} className="w-full max-w-xs py-7 bg-white text-[#5D6BB2] rounded-full font-black text-2xl shadow-2xl transition-transform active:scale-95 uppercase tracking-tight">NEXT LEVEL</button>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -264,15 +332,10 @@ export default function NeonPathGame() {
     )
 }
 
-function CircularButton({ icon, onClick, badge }: { icon: any, onClick?: () => void, badge?: string }) {
+function CircularButton({ icon, onClick }: { icon: any, onClick?: () => void }) {
     return (
-        <button onClick={onClick} className="w-16 h-16 bg-[#E0E2EE] rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm active:scale-90 transition-all relative">
+        <button onClick={onClick} className="w-16 h-16 bg-[#E4E6F0] rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm active:scale-90 transition-all">
             {icon}
-            {badge && (
-                <span className="absolute -top-1 -right-1 bg-white text-[8px] px-1.5 py-0.5 rounded-md border border-slate-200 font-black text-[#5D6BB2] shadow-sm">
-                    {badge}
-                </span>
-            )}
         </button>
     );
 }
@@ -280,40 +343,40 @@ function CircularButton({ icon, onClick, badge }: { icon: any, onClick?: () => v
 function ArrowPath({ node, gridW, gridH }: { node: PathNode, gridW: number, gridH: number }) {
     const rotations = { UP: 0, RIGHT: 90, DOWN: 180, LEFT: 270 };
 
-    // Scale calculation based on parent container being roughly 300-400px wide
-    // We want the SVG to draw the lines relative to the grid
-    const cellW = (1 / (gridW - 1)) * 340; // Approx board width
-    const cellH = (1 / (gridH - 1)) * 420; // Approx board height
+    const boardW = 340;
+    const boardH = 420;
+    const unitW = boardW / (gridW - 1);
+    const unitH = boardH / (gridH - 1);
 
     let pathD = "M 0 0";
     node.points.forEach((p, i) => {
         if (i === 0) return;
-        const dx = (p.x - node.points[0].x) * cellW;
-        const dy = (p.y - node.points[0].y) * cellH;
+        const dx = (p.x - node.points[0].x) * unitW;
+        const dy = (p.y - node.points[0].y) * unitH;
         pathD += ` L ${dx} ${dy}`;
     });
 
     const lastPoint = node.points[node.points.length - 1];
-    const arrowX = (lastPoint.x - node.points[0].x) * cellW;
-    const arrowY = (lastPoint.y - node.points[0].y) * cellH;
+    const arrowX = (lastPoint.x - node.points[0].x) * unitW;
+    const arrowY = (lastPoint.y - node.points[0].y) * unitH;
 
     return (
         <svg className="overflow-visible pointer-events-none">
-            {/* The Trail */}
+            {/* The Main Black Path */}
             <path
                 d={pathD}
                 fill="none"
-                stroke="#1a1a1a"
-                strokeWidth="11"
+                stroke="#111"
+                strokeWidth="12"
                 strokeLinecap="round"
                 strokeLinejoin="round"
             />
-            {/* The Start Dot (Empty in middle) */}
-            <circle cx="0" cy="0" r="6" fill="white" stroke="#1a1a1a" strokeWidth="2.5" />
+            {/* The Start Dot (Hollow circle) */}
+            <circle cx="0" cy="0" r="7" fill="white" stroke="#111" strokeWidth="4" />
 
             {/* The Arrow Head */}
             <g transform={`translate(${arrowX}, ${arrowY}) rotate(${rotations[node.dir]})`}>
-                <path d="M -15 -6 L 0 16 L 15 -6 Z" fill="#1a1a1a" />
+                <path d="M -16 -4 L 0 18 L 16 -4 Z" fill="#111" />
             </g>
         </svg>
     );
