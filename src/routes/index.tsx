@@ -262,9 +262,9 @@ export default function NeonPathGame() {
 
     return (
         <div className="h-screen w-full bg-[#F5F6F5] flex flex-col items-center overflow-hidden font-sans relative">
-            {/* Background Image */}
+            {/* Background Image - Brightened */}
             <div className="absolute inset-0 z-0">
-                <img src="/background.png" className="w-full h-full object-cover opacity-10 pointer-events-none" alt="" onError={(e) => e.currentTarget.style.display = 'none'} />
+                <img src="/background.png" className="w-full h-full object-cover opacity-40 blur-[2px] pointer-events-none" alt="" onError={(e) => e.currentTarget.style.display = 'none'} />
             </div>
 
             {/* Header */}
@@ -375,46 +375,37 @@ function CircularButton({ icon, onClick }: { icon: any, onClick?: () => void }) 
 }
 
 function ArrowShapeSVG({ node }: { node: PathNode }) {
-    const rotations = { UP: 0, RIGHT: 90, DOWN: 180, LEFT: 270 };
     const getX = (x: number) => x * 100;
     const getY = (y: number) => y * 100;
 
-    // 1. Calculate the Escape Path (Original points + a point far off-screen)
+    // 1. Calculate points and distances
     const last = node.points[node.points.length - 1];
     const exitPoint = { x: last.x, y: last.y };
-    if (node.dir === 'UP') exitPoint.y -= 15;
-    else if (node.dir === 'DOWN') exitPoint.y += 15;
-    else if (node.dir === 'LEFT') exitPoint.x -= 15;
-    else exitPoint.x += 15;
+    if (node.dir === 'UP') exitPoint.y -= 20;
+    else if (node.dir === 'DOWN') exitPoint.y += 20;
+    else if (node.dir === 'LEFT') exitPoint.x -= 20;
+    else exitPoint.x += 20;
 
     const fullPathPoints = [...node.points, exitPoint];
-
-    // 2. Build the SVG Path String
     let pathD = `M ${getX(fullPathPoints[0].x)} ${getY(fullPathPoints[0].y)}`;
     fullPathPoints.forEach((p, i) => { if (i > 0) pathD += ` L ${getX(p.x)} ${getY(p.y)}`; });
 
-    // 3. Calculate Lengths for "Snake" Animation
-    const segments: number[] = [];
+    let bodyLength = 0;
     for (let i = 0; i < node.points.length - 1; i++) {
-        const p1 = node.points[i];
-        const p2 = node.points[i+1];
-        segments.push(Math.sqrt(Math.pow(getX(p2.x) - getX(p1.x), 2) + Math.pow(getY(p2.y) - getY(p1.y), 2)));
+        bodyLength += Math.sqrt(Math.pow(getX(node.points[i+1].x)-getX(node.points[i].x),2) + Math.pow(getY(node.points[i+1].y)-getY(node.points[i].y),2));
     }
-    const bodyLength = segments.reduce((a, b) => a + b, 0);
-    const totalPathLength = bodyLength + 1500; // body + exit distance
+    const exitDist = 2000;
+    const totalPathLength = bodyLength + exitDist;
 
-    // 4. Animation variants for the "Unraveling" effect
+    // Head is always 'bodyLength' ahead of the current stroke-offset start
     const snakeVariants = {
-        idle: { strokeDashoffset: 0, strokeDasharray: `${bodyLength} 10000` },
+        idle: { strokeDashoffset: 0, strokeDasharray: `${bodyLength} ${totalPathLength}` },
         exit: {
-            strokeDashoffset: -(totalPathLength),
-            strokeDasharray: `${bodyLength} 10000`,
-            transition: { duration: 0.8, ease: "easeIn" }
+            strokeDashoffset: -totalPathLength,
+            transition: { duration: 1.2, ease: "linear" }
         }
     };
 
-    // Calculate Head and Tail positions for the icons to follow the path
-    // For simplicity, we'll use a CSS motion path for the Head/Tail components
     const motionPath = `path('${pathD}')`;
 
     return (
@@ -423,7 +414,7 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                 d={pathD}
                 fill="none"
                 stroke="#1a1a1a"
-                strokeWidth="24"
+                strokeWidth="26"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 initial="idle"
@@ -431,29 +422,30 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                 variants={snakeVariants}
             />
 
-            {/* Tail (Hollow Circle) - Follows the tracks */}
+            {/* Tail follows the start of the visible dash */}
             <motion.circle
-                r="12"
+                r="13"
                 fill="white"
                 stroke="#1a1a1a"
                 strokeWidth="8"
-                style={{ offsetPath: motionPath, offsetDistance: "0%" }}
+                style={{ offsetPath: motionPath, offsetRotate: "0deg" }}
                 animate={node.exitProgress ? {
                     offsetDistance: "100%",
-                    transition: { duration: 0.8, ease: "easeIn" }
-                } : {}}
+                    transition: { duration: 1.2, ease: "linear" }
+                } : { offsetDistance: "0%" }}
             />
 
-            {/* Head (Arrowhead) - Follows the tracks */}
+            {/* Head follows the end of the visible dash */}
             <motion.g
-                animate={node.exitProgress ? {
-                    offsetDistance: "100%",
-                    transition: { duration: 0.8, ease: "easeIn" }
-                } : {}}
                 style={{
                     offsetPath: motionPath,
-                    offsetDistance: `${(bodyLength / totalPathLength) * 100}%`,
-                    offsetRotate: "auto 180deg" // auto-rotate the arrow to face forward
+                    offsetRotate: "auto 180deg"
+                }}
+                animate={node.exitProgress ? {
+                    offsetDistance: "100%",
+                    transition: { duration: 1.2 * (totalPathLength / exitDist), ease: "linear" }
+                } : {
+                    offsetDistance: `${(bodyLength / totalPathLength) * 100}%`
                 }}
             >
                 <path d="M -24 8 L 0 -36 L 24 8 Z" fill="#1a1a1a" />
