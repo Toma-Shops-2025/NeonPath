@@ -58,15 +58,15 @@ export default function NeonPathGame() {
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
         const occupied = new Set<string>();
-        // Ensure Level 1 looks full and challenging like the screenshot
-        const count = Math.min(16 + (lvl * 2), 36);
+        // Fill the board with many arrows like the reference screenshot
+        const count = Math.min(22 + (lvl * 2), 42);
 
         for (let i = 0; i < count; i++) {
             let points: Point[] = [];
             let dir: Direction;
             let attempts = 0;
 
-            while (attempts < 200) {
+            while (attempts < 150) {
                 const edge = Math.floor(Math.random() * 4);
                 let start: Point;
                 let initialDir: Direction;
@@ -81,8 +81,8 @@ export default function NeonPathGame() {
                 let cur = { ...start };
                 const path: Point[] = [cur];
 
-                // Maximum snaking segments
-                const segments = Math.floor(Math.random() * 6) + 6;
+                // Fewer segments allows more arrows to fit, creating the "filled" look
+                const segments = Math.floor(Math.random() * 3) + 3;
                 let valid = true;
                 let moveDir = initialDir;
 
@@ -117,7 +117,7 @@ export default function NeonPathGame() {
                     else moveDir = Math.random() > 0.5 ? 'UP' : 'DOWN';
                 }
 
-                if (valid && path.length >= 4) {
+                if (valid && path.length >= 2) {
                     points = path.reverse();
                     break;
                 }
@@ -146,10 +146,12 @@ export default function NeonPathGame() {
     const handleNodeClick = async (clickedNode: PathNode) => {
         if (isWon || clickedNode.cleared || isProcessing) return;
 
+        // Enhanced Collision: Check if ANY part of our body would hit ANY part of another arrow on the way out
         const isBlocked = nodes.some(other => {
             if (other.cleared || other.id === clickedNode.id) return false;
             return clickedNode.points.some(p => {
                 return other.points.some(op => {
+                    // Body-Sweep logic: If any point of the other snake is directly in our path of travel
                     if (clickedNode.dir === 'UP') return p.x === op.x && p.y > op.y;
                     if (clickedNode.dir === 'DOWN') return p.x === op.x && p.y < op.y;
                     if (clickedNode.dir === 'LEFT') return p.y === op.y && p.x > op.x;
@@ -161,10 +163,9 @@ export default function NeonPathGame() {
 
         if (isBlocked) {
             if (Capacitor.isNativePlatform()) Haptics.impact({ style: ImpactStyle.Heavy });
+            // Visual Shake Error
             setNodes(prev => prev.map(n => n.id === clickedNode.id ? { ...n, isError: true } : n));
             setTimeout(() => setNodes(prev => prev.map(n => ({ ...n, isError: false }))), 400);
-            if (lives > 1) setLives(prev => prev - 1);
-            else generateLevel(level);
             return;
         }
 
