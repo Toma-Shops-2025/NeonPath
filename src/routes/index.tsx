@@ -232,28 +232,43 @@ export default function NeonPathGame() {
 
     if (!user) {
         return (
-            <div className="h-screen w-full bg-[#F9F9F7] flex flex-col items-center justify-center p-8 text-slate-800 text-center font-sans">
-                <div className="w-20 h-20 bg-[#5D6BB2] rounded-3xl flex items-center justify-center shadow-lg mb-6">
-                    <Target className="text-white h-10 w-10" />
+            <div className="h-screen w-full bg-[#F9F9F7] flex flex-col items-center justify-center p-8 text-slate-800 text-center font-sans relative overflow-hidden">
+                {/* Background Image Placeholder */}
+                <div className="absolute inset-0 z-0 opacity-20">
+                    <img src="/background.png" className="w-full h-full object-cover" alt="" onError={(e) => e.currentTarget.style.display = 'none'} />
                 </div>
-                <h1 className="text-3xl font-black text-[#5D6BB2] mb-2 uppercase tracking-tighter italic">Neon Path</h1>
-                <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 mt-8">
-                    {!isLogin && <input type="text" placeholder="Gamer Tag" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} required />}
-                    <input type="email" placeholder="Email" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm" value={email} onChange={e => setEmail(e.target.value)} required />
-                    <input type="password" placeholder="Password" className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm" value={password} onChange={e => setPassword(e.target.value)} required />
-                    <button type="submit" className="w-full bg-[#5D6BB2] text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl mt-4">
-                        {isLogin ? 'Login' : 'Join Game'}
-                    </button>
-                    <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-slate-400 font-black uppercase mt-6 tracking-widest">{isLogin ? "Need an account? Join" : "Back to Login"}</button>
-                </form>
+
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-xl mb-6 overflow-hidden border-2 border-[#5D6BB2]/20">
+                        <img src="/logo.png" className="w-full h-full object-cover" alt="Neon Path" onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.parentElement!.innerHTML = '<div class="text-[#5D6BB2] font-black text-4xl italic">NP</div>';
+                        }} />
+                    </div>
+                    <h1 className="text-4xl font-black text-[#5D6BB2] mb-2 uppercase tracking-tighter italic drop-shadow-sm">Neon Path</h1>
+                    <form onSubmit={handleAuth} className="w-full max-w-sm space-y-3 mt-8">
+                        {!isLogin && <input type="text" placeholder="Gamer Tag" className="w-full bg-white/90 backdrop-blur-sm border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm focus:border-[#5D6BB2] transition-colors" value={usernameInput} onChange={e => setUsernameInput(e.target.value)} required />}
+                        <input type="email" placeholder="Email" className="w-full bg-white/90 backdrop-blur-sm border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm focus:border-[#5D6BB2] transition-colors" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <input type="password" placeholder="Password" className="w-full bg-white/90 backdrop-blur-sm border border-slate-200 rounded-2xl px-4 py-4 font-bold outline-none shadow-sm focus:border-[#5D6BB2] transition-colors" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <button type="submit" className="w-full bg-[#5D6BB2] text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl mt-4 active:scale-95 transition-transform">
+                            {isLogin ? 'Login' : 'Join Game'}
+                        </button>
+                        <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-center text-[10px] text-slate-400 font-black uppercase mt-6 tracking-widest">{isLogin ? "Need an account? Join" : "Back to Login"}</button>
+                    </form>
+                </div>
             </div>
         )
     }
 
     return (
-        <div className="h-screen w-full bg-[#F5F6F5] flex flex-col items-center overflow-hidden font-sans">
+        <div className="h-screen w-full bg-[#F5F6F5] flex flex-col items-center overflow-hidden font-sans relative">
+            {/* Background Image */}
+            <div className="absolute inset-0 z-0">
+                <img src="/background.png" className="w-full h-full object-cover opacity-10 pointer-events-none" alt="" onError={(e) => e.currentTarget.style.display = 'none'} />
+            </div>
+
             {/* Header */}
-            <div className="w-full px-6 pt-12 flex justify-between items-start z-20">
+            <div className="w-full px-6 pt-12 flex justify-between items-start z-20 relative">
                 <button onClick={() => signOut()} className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm active:scale-90 transition-transform border border-slate-100"><ChevronLeft size={28} strokeWidth={3}/></button>
                 <div className="flex flex-col items-center mt-2">
                     <span className="text-[#5D6BB2]/60 font-black text-xs uppercase mb-1 tracking-widest">Level {level}</span>
