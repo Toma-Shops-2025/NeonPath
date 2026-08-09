@@ -379,24 +379,85 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
     const getX = (x: number) => x * 100;
     const getY = (y: number) => y * 100;
 
-    let pathD = `M ${getX(node.points[0].x)} ${getY(node.points[0].y)}`;
-    node.points.forEach((p, i) => {
-        if (i === 0) return;
-        pathD += ` L ${getX(p.x)} ${getY(p.y)}`;
-    });
-
+    // 1. Calculate the Escape Path (Original points + a point far off-screen)
     const last = node.points[node.points.length - 1];
-    const headX = getX(last.x);
-    const headY = getY(last.y);
+    const exitPoint = { x: last.x, y: last.y };
+    if (node.dir === 'UP') exitPoint.y -= 15;
+    else if (node.dir === 'DOWN') exitPoint.y += 15;
+    else if (node.dir === 'LEFT') exitPoint.x -= 15;
+    else exitPoint.x += 15;
+
+    const fullPathPoints = [...node.points, exitPoint];
+
+    // 2. Build the SVG Path String
+    let pathD = `M ${getX(fullPathPoints[0].x)} ${getY(fullPathPoints[0].y)}`;
+    fullPathPoints.forEach((p, i) => { if (i > 0) pathD += ` L ${getX(p.x)} ${getY(p.y)}`; });
+
+    // 3. Calculate Lengths for "Snake" Animation
+    const segments: number[] = [];
+    for (let i = 0; i < node.points.length - 1; i++) {
+        const p1 = node.points[i];
+        const p2 = node.points[i+1];
+        segments.push(Math.sqrt(Math.pow(getX(p2.x) - getX(p1.x), 2) + Math.pow(getY(p2.y) - getY(p1.y), 2)));
+    }
+    const bodyLength = segments.reduce((a, b) => a + b, 0);
+    const totalPathLength = bodyLength + 1500; // body + exit distance
+
+    // 4. Animation variants for the "Unraveling" effect
+    const snakeVariants = {
+        idle: { strokeDashoffset: 0, strokeDasharray: `${bodyLength} 10000` },
+        exit: {
+            strokeDashoffset: -(totalPathLength),
+            strokeDasharray: `${bodyLength} 10000`,
+            transition: { duration: 0.8, ease: "easeIn" }
+        }
+    };
+
+    // Calculate Head and Tail positions for the icons to follow the path
+    // For simplicity, we'll use a CSS motion path for the Head/Tail components
+    const motionPath = `path('${pathD}')`;
 
     return (
         <g>
-            <path d={pathD} fill="none" stroke="#1a1a1a" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx={getX(node.points[0].x)} cy={getY(node.points[0].y)} r="12" fill="white" stroke="#1a1a1a" strokeWidth="8" />
-            <g transform={`translate(${headX}, ${headY}) rotate(${rotations[node.dir]})`}>
-                {/* Sharper Arrowhead pointing UP by default, rotation handles the rest */}
+            <motion.path
+                d={pathD}
+                fill="none"
+                stroke="#1a1a1a"
+                strokeWidth="24"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial="idle"
+                animate={node.exitProgress ? "exit" : "idle"}
+                variants={snakeVariants}
+            />
+
+            {/* Tail (Hollow Circle) - Follows the tracks */}
+            <motion.circle
+                r="12"
+                fill="white"
+                stroke="#1a1a1a"
+                strokeWidth="8"
+                style={{ offsetPath: motionPath, offsetDistance: "0%" }}
+                animate={node.exitProgress ? {
+                    offsetDistance: "100%",
+                    transition: { duration: 0.8, ease: "easeIn" }
+                } : {}}
+            />
+
+            {/* Head (Arrowhead) - Follows the tracks */}
+            <motion.g
+                animate={node.exitProgress ? {
+                    offsetDistance: "100%",
+                    transition: { duration: 0.8, ease: "easeIn" }
+                } : {}}
+                style={{
+                    offsetPath: motionPath,
+                    offsetDistance: `${(bodyLength / totalPathLength) * 100}%`,
+                    offsetRotate: "auto 180deg" // auto-rotate the arrow to face forward
+                }}
+            >
                 <path d="M -24 8 L 0 -36 L 24 8 Z" fill="#1a1a1a" />
-            </g>
+            </motion.g>
         </g>
     );
 }
