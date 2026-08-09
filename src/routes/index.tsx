@@ -4,7 +4,7 @@ import {
     RotateCcw, Lightbulb,
     Trophy, FastForward, Heart,
     ChevronLeft, Loader2,
-    Target, Hash
+    Target, Hash, Search
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -58,8 +58,8 @@ export default function NeonPathGame() {
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
         const occupied = new Set<string>();
-        // Max density for Level 6/7 look
-        const count = Math.min(16 + Math.floor(lvl / 1.1), 28);
+        // Ensure Level 1 looks full and challenging like the screenshot
+        const count = Math.min(16 + (lvl * 2), 36);
 
         for (let i = 0; i < count; i++) {
             let points: Point[] = [];
@@ -218,39 +218,46 @@ export default function NeonPathGame() {
     }
 
     return (
-        <div className="h-screen w-full bg-[#F3F4F5] flex flex-col items-center overflow-hidden font-sans">
+        <div className="h-screen w-full bg-[#F5F6F5] flex flex-col items-center overflow-hidden font-sans">
             {/* Header */}
-            <div className="w-full px-6 pt-10 flex justify-between items-center z-20">
-                <button onClick={() => signOut()} className="w-11 h-11 bg-[#E8EBF4] rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm active:scale-90 transition-transform"><ChevronLeft size={24} strokeWidth={3}/></button>
-                <div className="flex flex-col items-center">
-                    <span className="text-[#5D6BB2] font-black text-sm uppercase mb-1 tracking-tight">Level {level}</span>
-                    <div className="flex gap-1">
-                        {[...Array(lives)].map((_, i) => <Heart key={i} size={20} className="text-[#FF4A4A] fill-[#FF4A4A]" />)}
-                        {[...Array(3 - lives)].map((_, i) => <Heart key={i} size={20} className="text-slate-200 fill-slate-200" />)}
+            <div className="w-full px-6 pt-12 flex justify-between items-start z-20">
+                <button onClick={() => signOut()} className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm active:scale-90 transition-transform border border-slate-100"><ChevronLeft size={28} strokeWidth={3}/></button>
+                <div className="flex flex-col items-center mt-2">
+                    <span className="text-[#5D6BB2]/60 font-black text-xs uppercase mb-1 tracking-widest">Level {level}</span>
+                    <div className="flex gap-1.5">
+                        {[...Array(lives)].map((_, i) => <Heart key={i} size={22} className="text-[#FF4A4A] fill-[#FF4A4A]" />)}
+                        {[...Array(3 - lives)].map((_, i) => <Heart key={i} size={22} className="text-slate-200 fill-slate-200" />)}
                     </div>
                 </div>
-                <div className="bg-white pl-5 pr-2 py-2 rounded-full shadow-md flex items-center gap-3 border border-white">
-                     <span className="font-black text-slate-600 text-sm">{(profile?.cash_balance || 0).toFixed(2)}</span>
+                <div className="bg-white pl-2 pr-6 py-2.5 rounded-full shadow-sm flex items-center gap-3 border border-slate-100">
                      <div className="w-8 h-8 bg-[#FFC107] rounded-full flex items-center justify-center border-2 border-white/20 shadow-inner">
                         <div className="w-4 h-4 border-2 border-white/40 rounded-full" />
                      </div>
+                     <span className="font-black text-slate-700 text-lg">{(profile?.cash_balance || 0).toFixed(0)}</span>
                 </div>
             </div>
 
             {/* Game Board */}
-            <div className="flex-1 w-full flex items-center justify-center p-6">
-                <div className="w-full max-w-sm aspect-[4/5.6] bg-white rounded-[2.5rem] shadow-2xl border-[16px] border-white relative overflow-hidden">
+            <div className="flex-1 w-full flex items-center justify-center px-4 py-8">
+                <div className="w-full max-w-md h-full max-h-[75vh] bg-white rounded-[3rem] shadow-xl border-[16px] border-white relative overflow-hidden">
                     {/* Full Grid Squares */}
                     <div className="absolute inset-0 p-4">
-                        <div className="w-full h-full relative grid grid-cols-8 grid-rows-10 border-t border-l border-slate-100">
+                        <div className="w-full h-full relative grid grid-cols-8 grid-rows-10 border-t border-l border-slate-200/50">
                             {[...Array(80)].map((_, i) => (
-                                <div key={i} className="border-r border-b border-slate-100 flex items-start justify-start relative">
-                                    <div className="absolute top-0 left-0 w-1.5 h-1.5 bg-slate-200 rounded-full -translate-x-1/2 -translate-y-1/2" />
+                                <div key={i} className="border-r border-b border-slate-200/50 flex items-start justify-start relative">
+                                    <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-slate-200/80 rounded-full -translate-x-1/2 -translate-y-1/2" />
                                 </div>
                             ))}
                             {/* Final dots */}
-                            {[...Array(9)].map((_, i) => <div key={`v-${i}`} className="absolute bottom-0 bg-slate-200 w-1.5 h-1.5 rounded-full -translate-x-1/2 translate-y-1/2" style={{ left: `${(i/8)*100}%` }} />)}
-                            {[...Array(11)].map((_, i) => <div key={`h-${i}`} className="absolute right-0 bg-slate-200 w-1.5 h-1.5 rounded-full translate-x-1/2 -translate-y-1/2" style={{ top: `${(i/10)*100}%` }} />)}
+                            {[...Array(9)].map((_, i) => <div key={`v-${i}`} className="absolute bottom-0 bg-slate-200/80 w-2.5 h-2.5 rounded-full -translate-x-1/2 translate-y-1/2" style={{ left: `${(i/8)*100}%` }} />)}
+                            {[...Array(11)].map((_, i) => <div key={`h-${i}`} className="absolute right-0 bg-slate-200/80 w-2.5 h-2.5 rounded-full translate-x-1/2 -translate-y-1/2" style={{ top: `${(i/10)*100}%` }} />)}
+                        </div>
+                    </div>
+
+                    {/* Reference Search Icon */}
+                    <div className="absolute top-6 right-6 z-10">
+                        <div className="w-10 h-10 bg-[#E8EBF4] rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm">
+                            <Search size={20} strokeWidth={4} />
                         </div>
                     </div>
 
@@ -328,10 +335,11 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
 
     return (
         <g>
-            <path d={pathD} fill="none" stroke="#1a1a1a" strokeWidth="22" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx={getX(node.points[0].x)} cy={getY(node.points[0].y)} r="12" fill="white" stroke="#1a1a1a" strokeWidth="7" />
+            <path d={pathD} fill="none" stroke="#1a1a1a" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx={getX(node.points[0].x)} cy={getY(node.points[0].y)} r="12" fill="white" stroke="#1a1a1a" strokeWidth="8" />
             <g transform={`translate(${headX}, ${headY}) rotate(${rotations[node.dir]})`}>
-                <path d="M -26 -12 L 0 32 L 26 -12 Z" fill="#1a1a1a" />
+                {/* Sharper Arrowhead pointing UP by default, rotation handles the rest */}
+                <path d="M -24 8 L 0 -36 L 24 8 Z" fill="#1a1a1a" />
             </g>
         </g>
     );
