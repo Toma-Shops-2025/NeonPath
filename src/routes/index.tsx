@@ -26,9 +26,20 @@ interface PathNode {
     points: Point[];
     dir: Direction;
     cleared: boolean;
+    color: string;
     isError?: boolean;
     exitProgress?: number;
 }
+
+const NEON_COLORS = [
+    '#FF00FF', // Pink
+    '#00FF00', // Green
+    '#FFFF00', // Yellow
+    '#00FFFF', // Cyan
+    '#FF0000', // Red
+    '#9D00FF', // Purple
+    '#FF8000', // Orange
+];
 
 export default function NeonPathGame() {
     const { user, profile, loading, signIn, signUp, signOut, addCash, supabase } = useAuth()
@@ -60,14 +71,14 @@ export default function NeonPathGame() {
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
         const occupied = new Set<string>();
-        // Extreme density for a tightly packed "Traffic Jam" look
-        const targetCount = Math.min(100 + (lvl * 10), 180);
+        // Extreme density: Try to fill every possible gap for a traffic jam feel
+        const targetCount = Math.min(180 + (lvl * 15), 350);
         let consecutiveFailures = 0;
 
         for (let i = 0; i < targetCount; i++) {
             let placed = false;
             let attempts = 0;
-            while (attempts < 500) {
+            while (attempts < 800) {
                 const dir: Direction = (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[])[Math.floor(Math.random() * 4)];
                 const start: Point = {
                     x: Math.floor(Math.random() * gridW),
@@ -80,7 +91,6 @@ export default function NeonPathGame() {
                 let canExit = true;
                 let tx = start.x, ty = start.y;
 
-                // Move one step in exit direction to start checking
                 const stepExitX = dir === 'LEFT' ? -1 : (dir === 'RIGHT' ? 1 : 0);
                 const stepExitY = dir === 'UP' ? -1 : (dir === 'DOWN' ? 1 : 0);
 
@@ -96,7 +106,7 @@ export default function NeonPathGame() {
                 let cur = { ...start };
                 const path: Point[] = [cur];
                 // More segments = more compact/interlocking
-                const segments = Math.floor(Math.random() * 4) + 3;
+                const segments = Math.floor(Math.random() * 6) + 3;
                 let valid = true;
 
                 const opposite: Record<Direction, Direction> = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
@@ -130,7 +140,8 @@ export default function NeonPathGame() {
                         id: `node-${i}-${Math.random()}`,
                         points: path.reverse(),
                         dir,
-                        cleared: false
+                        cleared: false,
+                        color: NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)]
                     });
                     placed = true;
                     break;
@@ -142,7 +153,7 @@ export default function NeonPathGame() {
                 consecutiveFailures = 0;
             } else {
                 consecutiveFailures++;
-                if (consecutiveFailures > 100) break;
+                if (consecutiveFailures > 200) break;
             }
         }
 
@@ -252,10 +263,22 @@ export default function NeonPathGame() {
 
     return (
         <div className="h-screen w-full bg-[#F5F6F5] flex flex-col items-center overflow-hidden font-sans relative">
-            {/* Background Image - Brightened Further */}
-            <div className="absolute inset-0 z-0">
-                <img src="/background.png" className="w-full h-full object-cover opacity-60 pointer-events-none" alt="" onError={(e) => e.currentTarget.style.display = 'none'} />
-            </div>
+            {/* Background Image - Pulsating */}
+            <motion.div
+                className="absolute inset-0 z-0"
+                animate={{
+                    scale: [1, 1.05, 1],
+                    opacity: [0.5, 0.7, 0.5],
+                    filter: ["blur(0px) brightness(1)", "blur(2px) brightness(1.2)", "blur(0px) brightness(1)"]
+                }}
+                transition={{
+                    duration: 4,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                }}
+            >
+                <img src="/background.png" className="w-full h-full object-cover pointer-events-none" alt="" onError={(e) => e.currentTarget.style.display = 'none'} />
+            </motion.div>
 
             {/* Header */}
             <div className="w-full px-6 pt-12 flex justify-between items-start z-20 relative">
@@ -395,8 +418,8 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
             <motion.path
                 d={pathD}
                 fill="none"
-                stroke="#1a1a1a"
-                strokeWidth="22"
+                stroke={node.color}
+                strokeWidth="24"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 initial={{ strokeDasharray: `${bodyLength} ${totalPathLength}`, strokeDashoffset: 0 }}
@@ -404,15 +427,16 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                     strokeDashoffset: -totalPathLength,
                     transition: { duration: 1.0, ease: "linear" }
                 } : {}}
+                style={{ filter: `drop-shadow(0 0 10px ${node.color})` }}
             />
 
             {/* Tail */}
             <motion.circle
                 r="11"
                 fill="white"
-                stroke="#1a1a1a"
+                stroke={node.color}
                 strokeWidth="7"
-                style={{ offsetPath: motionPath, offsetRotate: "0deg" }}
+                style={{ offsetPath: motionPath, offsetRotate: "0deg", filter: `drop-shadow(0 0 5px ${node.color})` }}
                 initial={{ offsetDistance: "0%" }}
                 animate={node.exitProgress ? {
                     offsetDistance: "100%",
@@ -422,7 +446,7 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
 
             {/* Head */}
             <motion.g
-                style={{ offsetPath: motionPath, offsetRotate: "auto 180deg" }}
+                style={{ offsetPath: motionPath, offsetRotate: "auto 180deg", filter: `drop-shadow(0 0 5px ${node.color})` }}
                 initial={{ offsetDistance: `${(bodyLength / totalPathLength) * 100}%` }}
                 animate={node.exitProgress ? {
                     offsetDistance: "100%",
@@ -433,7 +457,7 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                     }
                 } : {}}
             >
-                <path d="M -20 8 L 0 -30 L 20 8 Z" fill="#1a1a1a" />
+                <path d="M -20 8 L 0 -30 L 20 8 Z" fill={node.color} />
             </motion.g>
         </g>
     );
