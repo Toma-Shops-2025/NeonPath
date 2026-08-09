@@ -35,35 +35,54 @@ function Vehicle({ data, onMove, grid }: { data: VehicleData, onMove: (id: numbe
 
     return (
         <group
-            position={[data.x - 3, 0.4, data.z - 3]}
+            position={[data.x - 3, 0.35, data.z - 3]}
             rotation={[0, data.orientation === 'HORIZONTAL' ? Math.PI / 2 : 0, 0]}
             onClick={handleClick}
         >
-            <Float speed={2} rotationIntensity={0.2} floatIntensity={0.5}>
-                {/* Car Body */}
+            {/* Low-Poly Car Body */}
+            <group>
+                {/* Main Chassis */}
                 <mesh castShadow receiveShadow>
-                    <boxGeometry args={[0.8, 0.6, data.length - 0.2]} />
-                    <meshStandardMaterial color={data.color} metalness={0.6} roughness={0.2} />
+                    <boxGeometry args={[0.85, 0.45, data.length - 0.15]} />
+                    <meshStandardMaterial color={data.color} flatShading={true} metalness={0} roughness={0.5} />
                 </mesh>
-                {/* Windshield */}
-                <mesh position={[0, 0.2, (data.length/2) - 0.5]} castShadow>
-                    <boxGeometry args={[0.7, 0.4, 0.1]} />
-                    <meshStandardMaterial color="#000000" />
+
+                {/* Cabin (Low-Poly Style) */}
+                <mesh position={[0, 0.35, -0.1]} castShadow>
+                    <boxGeometry args={[0.7, 0.3, data.length * 0.4]} />
+                    <meshStandardMaterial color={data.color} flatShading={true} />
                 </mesh>
-                {/* Wheels */}
-                {[-(data.length/2) + 0.5, (data.length/2) - 0.5].map((pos, i) => (
-                    <group key={i} position={[0, -0.3, pos]}>
-                        <mesh position={[-0.45, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                            <cylinderGeometry args={[0.2, 0.2, 0.1, 16]} />
-                            <meshStandardMaterial color="#222222" />
+
+                {/* Windows (Flat) */}
+                <mesh position={[0, 0.35, 0]} castShadow>
+                    <boxGeometry args={[0.72, 0.25, data.length * 0.38]} />
+                    <meshStandardMaterial color="#111111" flatShading={true} />
+                </mesh>
+
+                {/* Blocky Headlights */}
+                <mesh position={[0.3, 0, (data.length/2) - 0.1]}>
+                    <boxGeometry args={[0.2, 0.15, 0.05]} />
+                    <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={2} />
+                </mesh>
+                <mesh position={[-0.3, 0, (data.length/2) - 0.1]}>
+                    <boxGeometry args={[0.2, 0.15, 0.05]} />
+                    <meshStandardMaterial color="#FFFFFF" emissive="#FFFFFF" emissiveIntensity={2} />
+                </mesh>
+
+                {/* Blocky Wheels (Cylinders with few segments) */}
+                {[-(data.length/2) + 0.45, (data.length/2) - 0.45].map((pos, i) => (
+                    <group key={i} position={[0, -0.2, pos]}>
+                        <mesh position={[-0.42, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                            <cylinderGeometry args={[0.18, 0.18, 0.15, 6]} />
+                            <meshStandardMaterial color="#111111" flatShading={true} />
                         </mesh>
-                        <mesh position={[0.45, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-                            <cylinderGeometry args={[0.2, 0.2, 0.1, 16]} />
-                            <meshStandardMaterial color="#222222" />
+                        <mesh position={[0.42, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                            <cylinderGeometry args={[0.18, 0.18, 0.15, 6]} />
+                            <meshStandardMaterial color="#111111" flatShading={true} />
                         </mesh>
                     </group>
                 ))}
-            </Float>
+            </group>
         </group>
     )
 }
@@ -145,29 +164,45 @@ export default function TrafficJam3D({ onReward }: { onReward: (amt: number) => 
                 <p className="text-[#00FFFF] text-xs font-bold uppercase">Clear the lot to earn rewards</p>
             </div>
 
-            <Canvas shadows>
-                <PerspectiveCamera makeDefault position={[8, 8, 8]} fov={50} />
-                <OrbitControls enablePan={false} maxPolarAngle={Math.PI / 2.2} minDistance={5} maxDistance={15} />
+            <Canvas shadows gl={{ antialias: false }}>
+                <PerspectiveCamera makeDefault position={[8, 8, 8]} fov={45} />
+                <OrbitControls enablePan={false} maxPolarAngle={Math.PI / 2.3} minDistance={6} maxDistance={14} />
 
-                <ambientLight intensity={0.5} />
-                <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} castShadow />
-                <pointLight position={[-10, -10, -10]} intensity={0.5} />
+                <color attach="background" args={['#0a0a1a']} />
+                <fog attach="fog" args={['#0a0a1a', 8, 20]} />
 
-                <Environment preset="city" />
+                <ambientLight intensity={0.6} />
+                <directionalLight
+                    position={[10, 15, 5]}
+                    intensity={1.2}
+                    castShadow
+                    shadow-mapSize={[1024, 1024]}
+                />
+
+                <Environment preset="night" />
 
                 {/* Parking Lot Floor */}
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]} receiveShadow>
-                    <planeGeometry args={[7, 7]} />
-                    <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+                    <planeGeometry args={[10, 10]} />
+                    <meshStandardMaterial color="#1a1a2a" roughness={1} flatShading={true} />
                 </mesh>
 
-                {/* Grid Lines */}
-                <gridHelper args={[6, 6, 0xffffff, 0x444444]} position={[0, 0.01, 0]} />
+                {/* Grid Dots instead of lines for a cleaner low-poly feel */}
+                <group position={[0, 0.01, 0]}>
+                    {Array.from({ length: 7 }).map((_, i) => (
+                        Array.from({ length: 7 }).map((_, j) => (
+                            <mesh key={`${i}-${j}`} position={[i - 3, 0, j - 3]}>
+                                <boxGeometry args={[0.05, 0.01, 0.05]} />
+                                <meshStandardMaterial color="#444466" />
+                            </mesh>
+                        ))
+                    ))}
+                </group>
 
-                {/* Exit Markers */}
-                <mesh position={[3.5, 0.02, 2.5]} rotation={[-Math.PI/2, 0, Math.PI/2]}>
-                    <planeGeometry args={[1, 1]} />
-                    <meshStandardMaterial color="#00FF00" transparent opacity={0.3} />
+                {/* Exit Gate Markers */}
+                <mesh position={[3.5, 0, 2]} rotation={[-Math.PI/2, 0, 0]}>
+                    <planeGeometry args={[0.2, 2]} />
+                    <meshStandardMaterial color="#00FF00" emissive="#00FF00" emissiveIntensity={1.5} />
                 </mesh>
 
                 {vehicles.map(v => (
