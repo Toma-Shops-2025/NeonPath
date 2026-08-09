@@ -7,8 +7,8 @@ export class MusicEngine {
     private isPlaying: boolean = false;
 
     constructor() {
-        // Generate track list music1.mp3 to music14.mp3
-        this.tracks = Array.from({ length: 14 }, (_, i) => `/music/music${i + 1}.mp3`);
+        // Support both .mp3 and uppercase .MP3 naming
+        this.tracks = Array.from({ length: 14 }, (_, i) => `/music/music${i + 1}.MP3`);
         this.shuffle();
     }
 

@@ -47,8 +47,8 @@ export default function NeonPathGame() {
     const [isLogin, setIsLogin] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const gridW = 9;
-    const gridH = 11;
+    const gridW = 11;
+    const gridH = 15;
 
     useEffect(() => {
         if (Capacitor.isNativePlatform()) {
@@ -60,14 +60,14 @@ export default function NeonPathGame() {
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
         const occupied = new Set<string>();
-        // Extreme density: Try to fill every possible gap for a traffic jam feel
-        const targetCount = Math.min(80 + (lvl * 5), 140);
+        // Extreme density for a tightly packed "Traffic Jam" look
+        const targetCount = Math.min(100 + (lvl * 10), 180);
         let consecutiveFailures = 0;
 
         for (let i = 0; i < targetCount; i++) {
             let placed = false;
             let attempts = 0;
-            while (attempts < 400) {
+            while (attempts < 500) {
                 const dir: Direction = (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[])[Math.floor(Math.random() * 4)];
                 const start: Point = {
                     x: Math.floor(Math.random() * gridW),
@@ -81,31 +81,29 @@ export default function NeonPathGame() {
                 let tx = start.x, ty = start.y;
 
                 // Move one step in exit direction to start checking
-                if (dir === 'UP') ty--;
-                else if (dir === 'DOWN') ty++;
-                else if (dir === 'LEFT') tx--;
-                else tx++;
+                const stepExitX = dir === 'LEFT' ? -1 : (dir === 'RIGHT' ? 1 : 0);
+                const stepExitY = dir === 'UP' ? -1 : (dir === 'DOWN' ? 1 : 0);
+
+                tx += stepExitX; ty += stepExitY;
 
                 while (tx >= 0 && tx < gridW && ty >= 0 && ty < gridH) {
                     if (occupied.has(`${tx},${ty}`)) { canExit = false; break; }
-                    if (dir === 'UP') ty--;
-                    else if (dir === 'DOWN') ty++;
-                    else if (dir === 'LEFT') tx--;
-                    else tx++;
+                    tx += stepExitX; ty += stepExitY;
                 }
                 if (!canExit) { attempts++; continue; }
 
                 // 2. Snake BACKWARDS from the head to create the body
                 let cur = { ...start };
                 const path: Point[] = [cur];
-                const segments = Math.floor(Math.random() * 2) + 2;
+                // More segments = more compact/interlocking
+                const segments = Math.floor(Math.random() * 4) + 3;
                 let valid = true;
 
                 const opposite: Record<Direction, Direction> = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
                 let moveDir = opposite[dir];
 
                 for (let j = 0; j < segments; j++) {
-                    const dist = Math.floor(Math.random() * 2) + 1;
+                    const dist = 1; // 1 step at a time for maximum compactness
                     let next = { ...cur };
                     if (moveDir === 'UP') next.y -= dist;
                     else if (moveDir === 'DOWN') next.y += dist;
@@ -114,25 +112,14 @@ export default function NeonPathGame() {
 
                     if (next.x < 0 || next.x >= gridW || next.y < 0 || next.y >= gridH) { valid = false; break; }
 
-                    const stepX = next.x > cur.x ? 1 : (next.x < cur.x ? -1 : 0);
-                    const stepY = next.y > cur.y ? 1 : (next.y < cur.y ? -1 : 0);
-                    let sx = cur.x, sy = cur.y;
-
-                    while (sx !== next.x || sy !== next.y) {
-                        sx += stepX; sy += stepY;
-                        if (occupied.has(`${sx},${sy}`)) { valid = false; break; }
-                    }
+                    if (occupied.has(`${next.x},${next.y}`)) { valid = false; break; }
                     if (!valid) break;
 
                     path.push({ ...next });
                     cur = { ...next };
+                    occupied.add(`${next.x},${next.y}`);
 
-                    sx = path[path.length-2].x; sy = path[path.length-2].y;
-                    while (sx !== next.x || sy !== next.y) {
-                        sx += stepX; sy += stepY;
-                        occupied.add(`${sx},${sy}`);
-                    }
-
+                    // Change direction for next segment
                     if (moveDir === 'UP' || moveDir === 'DOWN') moveDir = Math.random() > 0.5 ? 'LEFT' : 'RIGHT';
                     else moveDir = Math.random() > 0.5 ? 'UP' : 'DOWN';
                 }
@@ -155,7 +142,7 @@ export default function NeonPathGame() {
                 consecutiveFailures = 0;
             } else {
                 consecutiveFailures++;
-                if (consecutiveFailures > 60) break;
+                if (consecutiveFailures > 100) break;
             }
         }
 
@@ -163,7 +150,7 @@ export default function NeonPathGame() {
         setIsWon(false);
         setIsGameOver(false);
         setLives(3);
-    }, []);
+    }, [gridW, gridH]);
 
     useEffect(() => {
         if (user && !loading) generateLevel(level);
@@ -289,24 +276,24 @@ export default function NeonPathGame() {
             </div>
 
             {/* Game Board */}
-            <div className="flex-1 w-full flex items-center justify-center px-4 py-8">
-                <div className="w-full max-w-md h-full max-h-[75vh] bg-white rounded-[3rem] shadow-xl border-[16px] border-white relative overflow-hidden">
+            <div className="flex-1 w-full flex items-center justify-center px-2 py-4">
+                <div className="w-full max-w-lg h-full max-h-[85vh] bg-white rounded-[3rem] shadow-xl border-[16px] border-white relative overflow-hidden">
                     {/* Full Grid Squares */}
                     <div className="absolute inset-0 p-4">
-                        <div className="w-full h-full relative grid grid-cols-8 grid-rows-10 border-t border-l border-slate-200/50">
-                            {[...Array(80)].map((_, i) => (
+                        <div className="w-full h-full relative grid grid-cols-10 grid-rows-14 border-t border-l border-slate-200/50">
+                            {[...Array(140)].map((_, i) => (
                                 <div key={i} className="border-r border-b border-slate-200/50 flex items-start justify-start relative">
-                                    <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-slate-200/80 rounded-full -translate-x-1/2 -translate-y-1/2" />
+                                    <div className="absolute top-0 left-0 w-2 h-2 bg-slate-200/80 rounded-full -translate-x-1/2 -translate-y-1/2" />
                                 </div>
                             ))}
                             {/* Final dots */}
-                            {[...Array(9)].map((_, i) => <div key={`v-${i}`} className="absolute bottom-0 bg-slate-200/80 w-2.5 h-2.5 rounded-full -translate-x-1/2 translate-y-1/2" style={{ left: `${(i/8)*100}%` }} />)}
-                            {[...Array(11)].map((_, i) => <div key={`h-${i}`} className="absolute right-0 bg-slate-200/80 w-2.5 h-2.5 rounded-full translate-x-1/2 -translate-y-1/2" style={{ top: `${(i/10)*100}%` }} />)}
+                            {[...Array(11)].map((_, i) => <div key={`v-${i}`} className="absolute bottom-0 bg-slate-200/80 w-2 h-2 rounded-full -translate-x-1/2 translate-y-1/2" style={{ left: `${(i/10)*100}%` }} />)}
+                            {[...Array(15)].map((_, i) => <div key={`h-${i}`} className="absolute right-0 bg-slate-200/80 w-2 h-2 rounded-full translate-x-1/2 -translate-y-1/2" style={{ top: `${(i/14)*100}%` }} />)}
                         </div>
                     </div>
 
                     {/* Reference Search Icon */}
-                    <div className="absolute top-6 right-6 z-10">
+                    <div className="absolute top-6 right-6 z-10 opacity-60">
                         <div className="w-10 h-10 bg-[#E8EBF4] rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm">
                             <Search size={20} strokeWidth={4} />
                         </div>
@@ -314,7 +301,7 @@ export default function NeonPathGame() {
 
                     {/* Shapes SVG Layer */}
                     <div className="absolute inset-0 p-4">
-                        <svg viewBox="0 0 800 1000" className="w-full h-full overflow-visible">
+                        <svg viewBox="0 0 1000 1400" className="w-full h-full overflow-visible">
                             {nodes.map((node) => (
                                 <g
                                     key={node.id}
@@ -384,11 +371,11 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
     // 1. Calculate path
     const last = node.points[node.points.length - 1];
     const exitPoint = { x: last.x, y: last.y };
-    const offset = 15;
-    if (node.dir === 'UP') exitPoint.y -= offset;
-    else if (node.dir === 'DOWN') exitPoint.y += offset;
-    else if (node.dir === 'LEFT') exitPoint.x -= offset;
-    else exitPoint.x += offset;
+    const exitSteps = 20;
+    if (node.dir === 'UP') exitPoint.y -= exitSteps;
+    else if (node.dir === 'DOWN') exitPoint.y += exitSteps;
+    else if (node.dir === 'LEFT') exitPoint.x -= exitSteps;
+    else exitPoint.x += exitSteps;
 
     const fullPathPoints = [...node.points, exitPoint];
     let pathD = `M ${getX(fullPathPoints[0].x)} ${getY(fullPathPoints[0].y)}`;
@@ -398,7 +385,7 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
     for (let i = 0; i < node.points.length - 1; i++) {
         bodyLength += Math.sqrt(Math.pow(getX(node.points[i+1].x)-getX(node.points[i].x),2) + Math.pow(getY(node.points[i+1].y)-getY(node.points[i].y),2));
     }
-    const exitLen = offset * 100;
+    const exitLen = exitSteps * 100;
     const totalPathLength = bodyLength + exitLen;
 
     const motionPath = `path('${pathD}')`;
@@ -409,19 +396,19 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                 d={pathD}
                 fill="none"
                 stroke="#1a1a1a"
-                strokeWidth="24"
+                strokeWidth="22"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 initial={{ strokeDasharray: `${bodyLength} ${totalPathLength}`, strokeDashoffset: 0 }}
                 animate={node.exitProgress ? {
                     strokeDashoffset: -totalPathLength,
-                    transition: { duration: 0.9, ease: "linear" }
+                    transition: { duration: 1.0, ease: "linear" }
                 } : {}}
             />
 
             {/* Tail */}
             <motion.circle
-                r="12"
+                r="11"
                 fill="white"
                 stroke="#1a1a1a"
                 strokeWidth="7"
@@ -429,7 +416,7 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                 initial={{ offsetDistance: "0%" }}
                 animate={node.exitProgress ? {
                     offsetDistance: "100%",
-                    transition: { duration: 0.9, ease: "linear" }
+                    transition: { duration: 1.0, ease: "linear" }
                 } : {}}
             />
 
@@ -440,13 +427,13 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                 animate={node.exitProgress ? {
                     offsetDistance: "100%",
                     transition: {
-                        duration: 0.9 * (exitLen / totalPathLength),
-                        delay: 0.9 * (bodyLength / totalPathLength),
+                        duration: 1.0 * (exitLen / totalPathLength),
+                        delay: 1.0 * (bodyLength / totalPathLength),
                         ease: "linear"
                     }
                 } : {}}
             >
-                <path d="M -22 8 L 0 -32 L 22 8 Z" fill="#1a1a1a" />
+                <path d="M -20 8 L 0 -30 L 20 8 Z" fill="#1a1a1a" />
             </motion.g>
         </g>
     );
