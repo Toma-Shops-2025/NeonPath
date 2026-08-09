@@ -13,8 +13,9 @@ import { Capacitor } from '@capacitor/core'
 // Game Components
 import NeonPlinko from '@/components/games/NeonPlinko'
 import NeonPusher from '@/components/games/NeonPusher'
+import TrafficJam3D from '@/components/games/TrafficJam3D'
 
-type GameMode = 'NONE' | 'PLINKO' | 'PUSHER' | 'PATH';
+type GameMode = 'NONE' | 'PLINKO' | 'PUSHER' | 'PATH' | 'TRAFFIC';
 
 export default function NeonHub() {
     const { user, profile, loading, signIn, signUp, signOut, addCash } = useAuth()
@@ -119,6 +120,13 @@ export default function NeonHub() {
                                 onClick={() => { music.start(); setMode('PUSHER'); }}
                             />
 
+                            <GameCard
+                                title="Parking Jam 3D"
+                                icon={<ArrowRightLeft size={40} />}
+                                color="#FF3300"
+                                onClick={() => { music.start(); setMode('TRAFFIC'); }}
+                            />
+
                             <button
                                 onClick={() => showRewardedAd()}
                                 className="w-full max-w-sm mt-8 py-5 border-2 border-dashed border-white/20 rounded-3xl flex flex-col items-center justify-center hover:bg-white/5 transition-colors"
@@ -133,10 +141,11 @@ export default function NeonHub() {
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.9 }}
-                            className="h-full w-full flex flex-col items-center justify-center"
+                            className="h-full w-full flex flex-col items-center justify-center p-4"
                         >
                             {mode === 'PLINKO' && <NeonPlinko onReward={(amt) => addCash(amt, 'Plinko')} />}
                             {mode === 'PUSHER' && <NeonPusher onReward={(amt) => addCash(amt, 'Pusher')} />}
+                            {mode === 'TRAFFIC' && <TrafficJam3D onReward={(amt) => addCash(amt, 'Traffic')} />}
                         </motion.div>
                     )}
                 </AnimatePresence>
