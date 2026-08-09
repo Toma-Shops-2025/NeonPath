@@ -59,8 +59,8 @@ export default function NeonPathGame() {
     const [isLogin, setIsLogin] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const gridW = 11;
-    const gridH = 15;
+    const gridW = 13;
+    const gridH = 19;
 
     useEffect(() => {
         if (Capacitor.isNativePlatform()) {
@@ -72,14 +72,14 @@ export default function NeonPathGame() {
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
         const occupied = new Set<string>();
-        // Total Dots: 11 * 15 = 165. We want to occupy at least 80% of them.
-        const targetCount = 200;
+        // Increase target count for 13x19 grid (~250 dots)
+        const targetCount = 350;
         let consecutiveFailures = 0;
 
         for (let i = 0; i < targetCount; i++) {
             let placed = false;
             let attempts = 0;
-            while (attempts < 400) {
+            while (attempts < 600) {
                 const dir: Direction = (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[])[Math.floor(Math.random() * 4)];
                 const start: Point = {
                     x: Math.floor(Math.random() * gridW),
@@ -101,10 +101,10 @@ export default function NeonPathGame() {
                 }
                 if (!canExit) { attempts++; continue; }
 
-                // 2. Snake Body
+                // 2. Snake Body - Compact 1-step logic
                 let cur = { ...start };
                 const path: Point[] = [cur];
-                const segments = Math.floor(Math.random() * 3) + 2;
+                const segments = Math.floor(Math.random() * 4) + 2;
                 let valid = true;
                 const opposite: Record<Direction, Direction> = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
                 let moveDir = opposite[dir];
@@ -132,7 +132,7 @@ export default function NeonPathGame() {
                     occupied.add(`${start.x},${start.y}`);
                     newNodes.push({
                         id: `node-${i}-${Math.random()}`,
-                        points: path.reverse(), // Last point is the head
+                        points: path.reverse(),
                         dir,
                         cleared: false,
                         color: NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)]
@@ -143,7 +143,7 @@ export default function NeonPathGame() {
                 attempts++;
             }
             if (placed) consecutiveFailures = 0;
-            else if (++consecutiveFailures > 100) break;
+            else if (++consecutiveFailures > 120) break;
         }
 
         setNodes(newNodes);
@@ -288,32 +288,22 @@ export default function NeonPathGame() {
             </div>
 
             {/* Game Board */}
-            <div className="flex-1 w-full flex items-center justify-center px-2 py-4 relative">
-                <div className="w-full max-w-lg h-full max-h-[85vh] bg-white rounded-[3rem] shadow-xl border-[16px] border-white relative overflow-hidden">
+            <div className="flex-1 w-full flex items-center justify-center px-1 py-2 relative">
+                <div className="w-full max-w-xl h-full max-h-[90vh] bg-white rounded-[2rem] shadow-xl border-[12px] border-white relative overflow-hidden">
                     {/* Full Grid Squares */}
-                    <div className="absolute inset-0 p-4">
-                        <div className="w-full h-full relative grid grid-cols-10 grid-rows-14 border-t border-l border-slate-200/50">
-                            {[...Array(140)].map((_, i) => (
+                    <div className="absolute inset-0 p-3">
+                        <div className="w-full h-full relative grid grid-cols-12 grid-rows-18 border-t border-l border-slate-200/50">
+                            {[...Array(216)].map((_, i) => (
                                 <div key={i} className="border-r border-b border-slate-200/50 flex items-start justify-start relative">
-                                    <div className="absolute top-0 left-0 w-2 h-2 bg-slate-200/80 rounded-full -translate-x-1/2 -translate-y-1/2" />
+                                    <div className="absolute top-0 left-0 w-1.5 h-1.5 bg-slate-200/80 rounded-full -translate-x-1/2 -translate-y-1/2" />
                                 </div>
                             ))}
-                            {/* Final dots */}
-                            {[...Array(11)].map((_, i) => <div key={`v-${i}`} className="absolute bottom-0 bg-slate-200/80 w-2 h-2 rounded-full -translate-x-1/2 translate-y-1/2" style={{ left: `${(i/10)*100}%` }} />)}
-                            {[...Array(15)].map((_, i) => <div key={`h-${i}`} className="absolute right-0 bg-slate-200/80 w-2 h-2 rounded-full translate-x-1/2 -translate-y-1/2" style={{ top: `${(i/14)*100}%` }} />)}
-                        </div>
-                    </div>
-
-                    {/* Reference Search Icon */}
-                    <div className="absolute top-6 right-6 z-10 opacity-60">
-                        <div className="w-10 h-10 bg-[#E8EBF4] rounded-full flex items-center justify-center text-[#5D6BB2] shadow-sm">
-                            <Search size={20} strokeWidth={4} />
                         </div>
                     </div>
 
                     {/* Shapes SVG Layer */}
-                    <div className="absolute inset-0 p-4">
-                        <svg viewBox="0 0 1000 1400" className="w-full h-full overflow-visible">
+                    <div className="absolute inset-0 p-3">
+                        <svg viewBox="0 0 1200 1800" className="w-full h-full overflow-visible">
                             {nodes.map((node) => (
                                 <g
                                     key={node.id}
@@ -450,7 +440,7 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
 
             {/* Head */}
             <motion.g
-                style={{ offsetPath: motionPath, offsetRotate: "auto 180deg", filter: `drop-shadow(0 0 5px ${node.color})` }}
+                style={{ offsetPath: motionPath, offsetRotate: "auto" }}
                 initial={{ offsetDistance: `${(bodyLength / totalPathLength) * 100}%` }}
                 animate={node.exitProgress ? {
                     offsetDistance: "100%",
@@ -461,7 +451,7 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                     }
                 } : {}}
             >
-                <path d="M -20 8 L 0 -30 L 20 8 Z" fill={node.color} />
+                <path d="M -18 -26 L 18 -26 L 0 14 Z" fill={node.color} transform="rotate(180)" />
             </motion.g>
         </g>
     );
