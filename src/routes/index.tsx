@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { initAds, showRewardedAd, showInterstitial, setBannerVisible } from '@/lib/ads'
+import { music } from '@/lib/audio'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { Capacitor } from '@capacitor/core'
 
@@ -169,6 +170,7 @@ export default function NeonPathGame() {
     }, [level, user, loading, generateLevel]);
 
     const handleNodeClick = async (clickedNode: PathNode) => {
+        music.start(); // Start music on first interaction
         if (isWon || isGameOver || clickedNode.cleared || isProcessing) return;
 
         // Enhanced Collision: Check if ANY part of our body would hit ANY part of another arrow on the way out
@@ -220,6 +222,7 @@ export default function NeonPathGame() {
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
+        music.start(); // Start music on auth interaction
         if (isSubmitting) return;
         setIsSubmitting(true);
         try {
