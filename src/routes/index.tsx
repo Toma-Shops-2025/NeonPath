@@ -50,6 +50,7 @@ export default function NeonPathGame() {
     const [isWon, setIsWon] = useState(false);
     const [isGameOver, setIsGameOver] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [hasStarted, setHasStarted] = useState(false); // Music/Start gate
 
     // Auth State
     const [email, setEmail] = useState('');
@@ -71,14 +72,14 @@ export default function NeonPathGame() {
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
         const occupied = new Set<string>();
-        // Extreme density: Try to fill every possible gap for a traffic jam feel
-        const targetCount = Math.min(180 + (lvl * 15), 350);
+        // Total Dots: 11 * 15 = 165. We want to occupy at least 80% of them.
+        const targetCount = 200;
         let consecutiveFailures = 0;
 
         for (let i = 0; i < targetCount; i++) {
             let placed = false;
             let attempts = 0;
-            while (attempts < 800) {
+            while (attempts < 400) {
                 const dir: Direction = (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[])[Math.floor(Math.random() * 4)];
                 const start: Point = {
                     x: Math.floor(Math.random() * gridW),
@@ -87,49 +88,42 @@ export default function NeonPathGame() {
 
                 if (occupied.has(`${start.x},${start.y}`)) { attempts++; continue; }
 
-                // 1. Check if exit path is clear (Reverse Generation Rule)
+                // 1. Exit Path Check
                 let canExit = true;
                 let tx = start.x, ty = start.y;
+                const stepX = dir === 'LEFT' ? -1 : (dir === 'RIGHT' ? 1 : 0);
+                const stepY = dir === 'UP' ? -1 : (dir === 'DOWN' ? 1 : 0);
 
-                const stepExitX = dir === 'LEFT' ? -1 : (dir === 'RIGHT' ? 1 : 0);
-                const stepExitY = dir === 'UP' ? -1 : (dir === 'DOWN' ? 1 : 0);
-
-                tx += stepExitX; ty += stepExitY;
-
+                tx += stepX; ty += stepY;
                 while (tx >= 0 && tx < gridW && ty >= 0 && ty < gridH) {
                     if (occupied.has(`${tx},${ty}`)) { canExit = false; break; }
-                    tx += stepExitX; ty += stepExitY;
+                    tx += stepX; ty += stepY;
                 }
                 if (!canExit) { attempts++; continue; }
 
-                // 2. Snake BACKWARDS from the head to create the body
+                // 2. Snake Body
                 let cur = { ...start };
                 const path: Point[] = [cur];
-                // More segments = more compact/interlocking
-                const segments = Math.floor(Math.random() * 6) + 3;
+                const segments = Math.floor(Math.random() * 3) + 2;
                 let valid = true;
-
                 const opposite: Record<Direction, Direction> = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
                 let moveDir = opposite[dir];
 
                 for (let j = 0; j < segments; j++) {
-                    const dist = 1; // 1 step at a time for maximum compactness
                     let next = { ...cur };
-                    if (moveDir === 'UP') next.y -= dist;
-                    else if (moveDir === 'DOWN') next.y += dist;
-                    else if (moveDir === 'LEFT') next.x -= dist;
-                    else next.x += dist;
+                    if (moveDir === 'UP') next.y -= 1;
+                    else if (moveDir === 'DOWN') next.y += 1;
+                    else if (moveDir === 'LEFT') next.x -= 1;
+                    else next.x += 1;
 
-                    if (next.x < 0 || next.x >= gridW || next.y < 0 || next.y >= gridH) { valid = false; break; }
-
-                    if (occupied.has(`${next.x},${next.y}`)) { valid = false; break; }
-                    if (!valid) break;
+                    if (next.x < 0 || next.x >= gridW || next.y < 0 || next.y >= gridH || occupied.has(`${next.x},${next.y}`)) {
+                        valid = false; break;
+                    }
 
                     path.push({ ...next });
                     cur = { ...next };
                     occupied.add(`${next.x},${next.y}`);
 
-                    // Change direction for next segment
                     if (moveDir === 'UP' || moveDir === 'DOWN') moveDir = Math.random() > 0.5 ? 'LEFT' : 'RIGHT';
                     else moveDir = Math.random() > 0.5 ? 'UP' : 'DOWN';
                 }
@@ -138,7 +132,7 @@ export default function NeonPathGame() {
                     occupied.add(`${start.x},${start.y}`);
                     newNodes.push({
                         id: `node-${i}-${Math.random()}`,
-                        points: path.reverse(),
+                        points: path.reverse(), // Last point is the head
                         dir,
                         cleared: false,
                         color: NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)]
@@ -148,13 +142,8 @@ export default function NeonPathGame() {
                 }
                 attempts++;
             }
-
-            if (placed) {
-                consecutiveFailures = 0;
-            } else {
-                consecutiveFailures++;
-                if (consecutiveFailures > 200) break;
-            }
+            if (placed) consecutiveFailures = 0;
+            else if (++consecutiveFailures > 100) break;
         }
 
         setNodes(newNodes);
@@ -299,7 +288,7 @@ export default function NeonPathGame() {
             </div>
 
             {/* Game Board */}
-            <div className="flex-1 w-full flex items-center justify-center px-2 py-4">
+            <div className="flex-1 w-full flex items-center justify-center px-2 py-4 relative">
                 <div className="w-full max-w-lg h-full max-h-[85vh] bg-white rounded-[3rem] shadow-xl border-[16px] border-white relative overflow-hidden">
                     {/* Full Grid Squares */}
                     <div className="absolute inset-0 p-4">
@@ -332,8 +321,7 @@ export default function NeonPathGame() {
                                     className="cursor-pointer pointer-events-auto"
                                     style={{
                                         opacity: node.cleared ? 0 : 1,
-                                        transition: 'opacity 200ms, transform 600ms cubic-bezier(0.4, 0, 0.2, 1)',
-                                        transform: node.exitProgress ? `translate(${node.dir === 'LEFT' ? -1500 : node.dir === 'RIGHT' ? 1500 : 0}px, ${node.dir === 'UP' ? -1500 : node.dir === 'DOWN' ? 1500 : 0}px)` : 'none'
+                                        transition: 'opacity 200ms'
                                     }}
                                 >
                                     <motion.g animate={node.isError ? { x: [-10, 10, -10, 10, 0] } : {}}>
@@ -344,6 +332,22 @@ export default function NeonPathGame() {
                         </svg>
                     </div>
                 </div>
+
+                {/* START OVERLAY */}
+                {!hasStarted && (
+                    <div className="absolute inset-0 z-[60] flex items-center justify-center p-8">
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm rounded-[3rem]" />
+                        <motion.button
+                            initial={{ scale: 0.9 }}
+                            animate={{ scale: [0.9, 1.1, 0.9] }}
+                            transition={{ repeat: Infinity, duration: 2 }}
+                            onClick={() => { music.start(); setHasStarted(true); }}
+                            className="relative z-10 bg-[#5D6BB2] text-white px-12 py-6 rounded-full font-black text-2xl shadow-2xl uppercase tracking-widest"
+                        >
+                            Tap to Play
+                        </motion.button>
+                    </div>
+                )}
             </div>
 
             {/* Bottom Controls (Grouped Like Screenshot 2) */}
