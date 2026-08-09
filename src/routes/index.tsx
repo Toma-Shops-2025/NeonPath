@@ -59,33 +59,41 @@ export default function NeonPathGame() {
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
         const occupied = new Set<string>();
-        // Maximize density to fill every possible gap
-        const count = Math.min(30 + (lvl * 3), 55);
+        // Extreme density for interlocking puzzles
+        const count = Math.min(35 + (lvl * 3), 65);
 
         for (let i = 0; i < count; i++) {
-            let points: Point[] = [];
-            let dir: Direction;
             let attempts = 0;
-
-            while (attempts < 100) {
-                const edge = Math.floor(Math.random() * 4);
-                let start: Point;
-                let initialDir: Direction;
-
-                if (edge === 0) { start = { x: Math.floor(Math.random() * (gridW-2))+1, y: 0 }; initialDir = 'DOWN'; dir = 'UP'; }
-                else if (edge === 1) { start = { x: Math.floor(Math.random() * (gridW-2))+1, y: gridH - 1 }; initialDir = 'UP'; dir = 'DOWN'; }
-                else if (edge === 2) { start = { x: 0, y: Math.floor(Math.random() * (gridH-2))+1 }; initialDir = 'RIGHT'; dir = 'LEFT'; }
-                else { start = { x: gridW - 1, y: Math.floor(Math.random() * (gridH-2))+1 }; initialDir = 'LEFT'; dir = 'RIGHT'; }
+            while (attempts < 60) {
+                const dir: Direction = (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[])[Math.floor(Math.random() * 4)];
+                // Head can be anywhere in the grid
+                const start: Point = {
+                    x: Math.floor(Math.random() * (gridW - 2)) + 1,
+                    y: Math.floor(Math.random() * (gridH - 2)) + 1
+                };
 
                 if (occupied.has(`${start.x},${start.y}`)) { attempts++; continue; }
 
+                // 1. Check if exit path is clear (Reverse Generation Rule)
+                let canExit = true;
+                let tx = start.x, ty = start.y;
+                while (tx >= 0 && tx < gridW && ty >= 0 && ty < gridH) {
+                    if (occupied.has(`${tx},${ty}`)) { canExit = false; break; }
+                    if (dir === 'UP') ty--;
+                    else if (dir === 'DOWN') ty++;
+                    else if (dir === 'LEFT') tx--;
+                    else tx++;
+                }
+                if (!canExit) { attempts++; continue; }
+
+                // 2. Snake BACKWARDS from the head to create the body in remaining empty space
                 let cur = { ...start };
                 const path: Point[] = [cur];
-
-                // Short, interlocking segments to pack the board tight
-                const segments = Math.floor(Math.random() * 2) + 2;
+                const segments = Math.floor(Math.random() * 3) + 2;
                 let valid = true;
-                let moveDir = initialDir;
+
+                const opposite: Record<Direction, Direction> = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
+                let moveDir = opposite[dir]; // Start snaking away from the exit
 
                 for (let j = 0; j < segments; j++) {
                     const dist = Math.floor(Math.random() * 2) + 1;
@@ -99,19 +107,21 @@ export default function NeonPathGame() {
 
                     const stepX = next.x > cur.x ? 1 : (next.x < cur.x ? -1 : 0);
                     const stepY = next.y > cur.y ? 1 : (next.y < cur.y ? -1 : 0);
-                    let tx = cur.x, ty = cur.y;
-                    while (tx !== next.x || ty !== next.y) {
-                        tx += stepX; ty += stepY;
-                        if (occupied.has(`${tx},${ty}`)) { valid = false; break; }
+                    let sx = cur.x, sy = cur.y;
+                    while (sx !== next.x || sy !== next.y) {
+                        sx += stepX; sy += stepY;
+                        if (occupied.has(`${sx},${sy}`)) { valid = false; break; }
                     }
                     if (!valid) break;
 
                     path.push({ ...next });
                     cur = { ...next };
-                    tx = path[path.length-2].x; ty = path[path.length-2].y;
-                    while (tx !== next.x || ty !== next.y) {
-                        tx += stepX; ty += stepY;
-                        occupied.add(`${tx},${ty}`);
+
+                    // Mark body as occupied
+                    sx = path[path.length-2].x; sy = path[path.length-2].y;
+                    while (sx !== next.x || sy !== next.y) {
+                        sx += stepX; sy += stepY;
+                        occupied.add(`${sx},${sy}`);
                     }
 
                     if (moveDir === 'UP' || moveDir === 'DOWN') moveDir = Math.random() > 0.5 ? 'LEFT' : 'RIGHT';
@@ -119,19 +129,17 @@ export default function NeonPathGame() {
                 }
 
                 if (valid && path.length >= 2) {
-                    points = path.reverse();
+                    occupied.add(`${start.x},${start.y}`);
+                    newNodes.push({
+                        id: `node-${i}-${Math.random()}`,
+                        // path[0] is Head, path[last] is Tail. reverse() so ArrowShapeSVG works correctly (last=head)
+                        points: path.reverse(),
+                        dir,
+                        cleared: false
+                    });
                     break;
                 }
                 attempts++;
-            }
-
-            if (points.length >= 2) {
-                newNodes.push({
-                    id: `node-${i}-${Math.random()}`,
-                    points,
-                    dir,
-                    cleared: false
-                });
             }
         }
 
