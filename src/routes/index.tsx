@@ -36,6 +36,7 @@ export default function NeonPathGame() {
     const [lives, setLives] = useState(3);
     const [nodes, setNodes] = useState<PathNode[]>([]);
     const [isWon, setIsWon] = useState(false);
+    const [isGameOver, setIsGameOver] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
     // Auth State
@@ -58,15 +59,15 @@ export default function NeonPathGame() {
     const generateLevel = useCallback((lvl: number) => {
         const newNodes: PathNode[] = [];
         const occupied = new Set<string>();
-        // Fill the board with many arrows like the reference screenshot
-        const count = Math.min(22 + (lvl * 2), 42);
+        // Maximize density to fill every possible gap
+        const count = Math.min(30 + (lvl * 3), 55);
 
         for (let i = 0; i < count; i++) {
             let points: Point[] = [];
             let dir: Direction;
             let attempts = 0;
 
-            while (attempts < 150) {
+            while (attempts < 100) {
                 const edge = Math.floor(Math.random() * 4);
                 let start: Point;
                 let initialDir: Direction;
@@ -81,8 +82,8 @@ export default function NeonPathGame() {
                 let cur = { ...start };
                 const path: Point[] = [cur];
 
-                // Fewer segments allows more arrows to fit, creating the "filled" look
-                const segments = Math.floor(Math.random() * 3) + 3;
+                // Short, interlocking segments to pack the board tight
+                const segments = Math.floor(Math.random() * 2) + 2;
                 let valid = true;
                 let moveDir = initialDir;
 
@@ -136,6 +137,7 @@ export default function NeonPathGame() {
 
         setNodes(newNodes);
         setIsWon(false);
+        setIsGameOver(false);
         setLives(3);
     }, []);
 
@@ -144,7 +146,7 @@ export default function NeonPathGame() {
     }, [level, user, loading, generateLevel]);
 
     const handleNodeClick = async (clickedNode: PathNode) => {
-        if (isWon || clickedNode.cleared || isProcessing) return;
+        if (isWon || isGameOver || clickedNode.cleared || isProcessing) return;
 
         // Enhanced Collision: Check if ANY part of our body would hit ANY part of another arrow on the way out
         const isBlocked = nodes.some(other => {
@@ -166,6 +168,13 @@ export default function NeonPathGame() {
             // Visual Shake Error
             setNodes(prev => prev.map(n => n.id === clickedNode.id ? { ...n, isError: true } : n));
             setTimeout(() => setNodes(prev => prev.map(n => ({ ...n, isError: false }))), 400);
+
+            // Strike logic
+            const newLives = lives - 1;
+            setLives(newLives);
+            if (newLives <= 0) {
+                setIsGameOver(true);
+            }
             return;
         }
 
@@ -297,13 +306,21 @@ export default function NeonPathGame() {
                 <CircularButton onClick={() => generateLevel(level)} icon={<RotateCcw size={28} strokeWidth={3}/>} />
             </div>
 
-            {/* Victory Overlay */}
+            {/* Overlays */}
             <AnimatePresence>
                 {isWon && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-[#5D6BB2]/90 flex flex-col items-center justify-center p-12 text-center text-white backdrop-blur-md">
                         <Trophy className="h-40 w-40 mb-8 drop-shadow-2xl" />
                         <h2 className="text-6xl font-black italic mb-10 tracking-tighter">EXCELLENT!</h2>
                         <button onClick={() => setLevel(prev => prev + 1)} className="w-full max-w-xs py-7 bg-white text-[#5D6BB2] rounded-full font-black text-2xl shadow-2xl transition-transform active:scale-95 uppercase">NEXT LEVEL</button>
+                    </motion.div>
+                )}
+                {isGameOver && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[100] bg-black/80 flex flex-col items-center justify-center p-12 text-center text-white backdrop-blur-md">
+                        <Target className="h-40 w-40 mb-8 text-[#FF4A4A]" />
+                        <h2 className="text-6xl font-black italic mb-10 tracking-tighter">GAME OVER</h2>
+                        <p className="text-xl font-bold mb-10 text-slate-300">Too many strikes! The path is blocked.</p>
+                        <button onClick={() => generateLevel(level)} className="w-full max-w-xs py-7 bg-[#FF4A4A] text-white rounded-full font-black text-2xl shadow-2xl transition-transform active:scale-95 uppercase">TRY AGAIN</button>
                     </motion.div>
                 )}
             </AnimatePresence>
