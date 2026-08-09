@@ -265,9 +265,9 @@ export default function NeonPathGame() {
 
     return (
         <div className="h-screen w-full bg-[#F5F6F5] flex flex-col items-center overflow-hidden font-sans relative">
-            {/* Background Image - Brightened */}
+            {/* Background Image - Brightened Further */}
             <div className="absolute inset-0 z-0">
-                <img src="/background.png" className="w-full h-full object-cover opacity-40 blur-[2px] pointer-events-none" alt="" onError={(e) => e.currentTarget.style.display = 'none'} />
+                <img src="/background.png" className="w-full h-full object-cover opacity-60 pointer-events-none" alt="" onError={(e) => e.currentTarget.style.display = 'none'} />
             </div>
 
             {/* Header */}
@@ -381,13 +381,14 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
     const getX = (x: number) => x * 100;
     const getY = (y: number) => y * 100;
 
-    // 1. Calculate points and distances
+    // 1. Calculate path
     const last = node.points[node.points.length - 1];
     const exitPoint = { x: last.x, y: last.y };
-    if (node.dir === 'UP') exitPoint.y -= 20;
-    else if (node.dir === 'DOWN') exitPoint.y += 20;
-    else if (node.dir === 'LEFT') exitPoint.x -= 20;
-    else exitPoint.x += 20;
+    const offset = 15;
+    if (node.dir === 'UP') exitPoint.y -= offset;
+    else if (node.dir === 'DOWN') exitPoint.y += offset;
+    else if (node.dir === 'LEFT') exitPoint.x -= offset;
+    else exitPoint.x += offset;
 
     const fullPathPoints = [...node.points, exitPoint];
     let pathD = `M ${getX(fullPathPoints[0].x)} ${getY(fullPathPoints[0].y)}`;
@@ -397,17 +398,8 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
     for (let i = 0; i < node.points.length - 1; i++) {
         bodyLength += Math.sqrt(Math.pow(getX(node.points[i+1].x)-getX(node.points[i].x),2) + Math.pow(getY(node.points[i+1].y)-getY(node.points[i].y),2));
     }
-    const exitDist = 2000;
-    const totalPathLength = bodyLength + exitDist;
-
-    // Head is always 'bodyLength' ahead of the current stroke-offset start
-    const snakeVariants = {
-        idle: { strokeDashoffset: 0, strokeDasharray: `${bodyLength} ${totalPathLength}` },
-        exit: {
-            strokeDashoffset: -totalPathLength,
-            transition: { duration: 1.2, ease: "linear" }
-        }
-    };
+    const exitLen = offset * 100;
+    const totalPathLength = bodyLength + exitLen;
 
     const motionPath = `path('${pathD}')`;
 
@@ -417,41 +409,44 @@ function ArrowShapeSVG({ node }: { node: PathNode }) {
                 d={pathD}
                 fill="none"
                 stroke="#1a1a1a"
-                strokeWidth="26"
+                strokeWidth="24"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                initial="idle"
-                animate={node.exitProgress ? "exit" : "idle"}
-                variants={snakeVariants}
+                initial={{ strokeDasharray: `${bodyLength} ${totalPathLength}`, strokeDashoffset: 0 }}
+                animate={node.exitProgress ? {
+                    strokeDashoffset: -totalPathLength,
+                    transition: { duration: 0.9, ease: "linear" }
+                } : {}}
             />
 
-            {/* Tail follows the start of the visible dash */}
+            {/* Tail */}
             <motion.circle
-                r="13"
+                r="12"
                 fill="white"
                 stroke="#1a1a1a"
-                strokeWidth="8"
+                strokeWidth="7"
                 style={{ offsetPath: motionPath, offsetRotate: "0deg" }}
+                initial={{ offsetDistance: "0%" }}
                 animate={node.exitProgress ? {
                     offsetDistance: "100%",
-                    transition: { duration: 1.2, ease: "linear" }
-                } : { offsetDistance: "0%" }}
+                    transition: { duration: 0.9, ease: "linear" }
+                } : {}}
             />
 
-            {/* Head follows the end of the visible dash */}
+            {/* Head */}
             <motion.g
-                style={{
-                    offsetPath: motionPath,
-                    offsetRotate: "auto 180deg"
-                }}
+                style={{ offsetPath: motionPath, offsetRotate: "auto 180deg" }}
+                initial={{ offsetDistance: `${(bodyLength / totalPathLength) * 100}%` }}
                 animate={node.exitProgress ? {
                     offsetDistance: "100%",
-                    transition: { duration: 1.2 * (totalPathLength / exitDist), ease: "linear" }
-                } : {
-                    offsetDistance: `${(bodyLength / totalPathLength) * 100}%`
-                }}
+                    transition: {
+                        duration: 0.9 * (exitLen / totalPathLength),
+                        delay: 0.9 * (bodyLength / totalPathLength),
+                        ease: "linear"
+                    }
+                } : {}}
             >
-                <path d="M -24 8 L 0 -36 L 24 8 Z" fill="#1a1a1a" />
+                <path d="M -22 8 L 0 -32 L 22 8 Z" fill="#1a1a1a" />
             </motion.g>
         </g>
     );
