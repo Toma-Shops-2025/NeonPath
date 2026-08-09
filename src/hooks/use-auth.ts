@@ -97,21 +97,13 @@ export function useAuth() {
   };
 
   const signUp = async (email: string, pass: string, username: string) => {
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
         email,
         password: pass,
         options: { data: { username } }
     });
     if (error) throw error;
-    if (data.user) {
-        await supabase.from('profiles').insert({
-            id: data.user.id,
-            username,
-            email,
-            cash_balance: 0,
-            total_earned: 0
-        });
-    }
+    // The database trigger 'handle_new_user' takes it from here!
   };
 
   const signOut = async () => {
